@@ -28,7 +28,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. After install, `~/.claude/skills/librespin-concept/`, `~/.claude/agents/`, and `~/.claude/librespin/templates/` directories exist
   3. `package.json` has correct name, version, license, and bin entry pointing to `bin/install.js`
   4. Installer copies only `bin/` and `.claude/` subtree — no dev files included
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 01-01-PLAN.md — Package scaffold: cleanup, config files, placeholders, and installer
 
 ### Phase 2: Namespace Port
 **Goal**: All hw-concept content lives under the librespin namespace with no residual hw-concept strings in installed files
@@ -71,7 +74,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Package Scaffold | 0/? | Not started | - |
+| 1. Package Scaffold | 0/1 | Planning complete | - |
 | 2. Namespace Port | 0/? | Not started | - |
 | 3. End-to-End Validation | 0/? | Not started | - |
 | 4. Distribution and Docs | 0/? | Not started | - |
