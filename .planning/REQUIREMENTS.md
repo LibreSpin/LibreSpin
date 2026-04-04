@@ -13,6 +13,8 @@ Requirements for initial release (Milestone 1). Each maps to roadmap phases.
 - [ ] **PKG-02**: User can uninstall LibreSpin cleanly (all installed files removed)
 - [ ] **PKG-03**: Repository includes README with quick-start instructions (install, first run, what to expect)
 - [ ] **PKG-04**: package.json has correct metadata (name, version, license, bin entry)
+- [ ] **PKG-05**: `.claude-plugin/plugin.json` manifest exists with correct name, description, and version
+- [ ] **PKG-06**: Repository serves as a Claude Code plugin — `/plugin marketplace add LibreSpin/LibreSpin` then `/plugin install librespin` works and installs skills/agents/templates
 
 ### Skill Structure
 
@@ -76,7 +78,7 @@ Deferred to Milestone 2. Tracked but not in current roadmap.
 | KiCad integration (schematic/PCB) | v4-v6 milestones |
 | ERC/DRC/DFM checks | v3 milestone |
 | Production file export | v4 milestone |
-| npm marketplace / plugin format | v3+ when distribution becomes a goal |
+| npm marketplace / plugin format | Moved to v1 — PKG-05, PKG-06 |
 
 ## Traceability
 
@@ -88,6 +90,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PKG-02 | Phase 4 | Pending |
 | PKG-03 | Phase 4 | Pending |
 | PKG-04 | Phase 1 | Pending |
+| PKG-05 | Phase 4 | Pending |
+| PKG-06 | Phase 4 | Pending |
 | SKL-01 | Phase 2 | Pending |
 | SKL-02 | Phase 2 | Pending |
 | SKL-03 | Phase 2 | Pending |
@@ -110,8 +114,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CW-10 | Phase 3 | Pending |
 
 **Coverage:**
-- v1 requirements: 24 total
-- Mapped to phases: 24
+- v1 requirements: 26 total
+- Mapped to phases: 26
 - Unmapped: 0
 
 ---

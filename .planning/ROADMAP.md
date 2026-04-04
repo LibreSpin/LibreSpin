@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Package Scaffold** - npm package + npx installer with correct Claude Code directory layout
 - [ ] **Phase 2: Namespace Port** - Port all hw-concept content to librespin namespace with skill structure
 - [ ] **Phase 3: End-to-End Validation** - Verify all 9 workflow phases work correctly after the port
-- [ ] **Phase 4: Distribution and Docs** - Uninstall support, README, and npm publish
+- [ ] **Phase 4: Distribution and Docs** - Plugin marketplace, uninstall support, README, and optional npm publish
 
 ## Phase Details
 
@@ -58,13 +58,15 @@ Plans:
 **Plans**: TBD
 
 ### Phase 4: Distribution and Docs
-**Goal**: Any stranger can install LibreSpin from npm, understand what it does, and cleanly remove it
+**Goal**: Any stranger can install LibreSpin via Claude Code plugin marketplace, understand what it does, and cleanly remove it. npm publish is optional/secondary.
 **Depends on**: Phase 3
-**Requirements**: PKG-02, PKG-03
+**Requirements**: PKG-02, PKG-03, PKG-05, PKG-06
 **Success Criteria** (what must be TRUE):
-  1. Running `npx librespin-install --uninstall` (or equivalent) removes all installed files from ~/.claude/ cleanly
-  2. README includes install command, prerequisites (Node >= 18), first-run walkthrough, and what to expect from the concept agent
-  3. Package is published to npm and `npx librespin-install` resolves from the registry without a local clone
+  1. `.claude-plugin/plugin.json` exists with correct name, description, and version
+  2. Running `/plugin marketplace add LibreSpin/LibreSpin` then `/plugin install librespin` installs all skills, agents, and templates
+  3. Running `npx librespin-install --uninstall` (or equivalent) removes all installed files from ~/.claude/ cleanly
+  4. README includes marketplace install command (primary), npx install command (secondary), prerequisites, first-run walkthrough, and what to expect
+  5. Skill/agent/template files live at repo root in plugin-compatible layout (`skills/`, `agents/`, etc.)
 **Plans**: TBD
 
 ## Progress
