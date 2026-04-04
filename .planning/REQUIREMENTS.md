@@ -84,36 +84,36 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PKG-01 | TBD | Pending |
-| PKG-02 | TBD | Pending |
-| PKG-03 | TBD | Pending |
-| PKG-04 | TBD | Pending |
-| SKL-01 | TBD | Pending |
-| SKL-02 | TBD | Pending |
-| SKL-03 | TBD | Pending |
-| SKL-04 | TBD | Pending |
-| NSP-01 | TBD | Pending |
-| NSP-02 | TBD | Pending |
-| NSP-03 | TBD | Pending |
-| NSP-04 | TBD | Pending |
-| NSP-05 | TBD | Pending |
-| NSP-06 | TBD | Pending |
-| CW-01 | TBD | Pending |
-| CW-02 | TBD | Pending |
-| CW-03 | TBD | Pending |
-| CW-04 | TBD | Pending |
-| CW-05 | TBD | Pending |
-| CW-06 | TBD | Pending |
-| CW-07 | TBD | Pending |
-| CW-08 | TBD | Pending |
-| CW-09 | TBD | Pending |
-| CW-10 | TBD | Pending |
+| PKG-01 | Phase 1 | Pending |
+| PKG-02 | Phase 4 | Pending |
+| PKG-03 | Phase 4 | Pending |
+| PKG-04 | Phase 1 | Pending |
+| SKL-01 | Phase 2 | Pending |
+| SKL-02 | Phase 2 | Pending |
+| SKL-03 | Phase 2 | Pending |
+| SKL-04 | Phase 2 | Pending |
+| NSP-01 | Phase 2 | Pending |
+| NSP-02 | Phase 2 | Pending |
+| NSP-03 | Phase 2 | Pending |
+| NSP-04 | Phase 2 | Pending |
+| NSP-05 | Phase 2 | Pending |
+| NSP-06 | Phase 2 | Pending |
+| CW-01 | Phase 3 | Pending |
+| CW-02 | Phase 3 | Pending |
+| CW-03 | Phase 3 | Pending |
+| CW-04 | Phase 3 | Pending |
+| CW-05 | Phase 3 | Pending |
+| CW-06 | Phase 3 | Pending |
+| CW-07 | Phase 3 | Pending |
+| CW-08 | Phase 3 | Pending |
+| CW-09 | Phase 3 | Pending |
+| CW-10 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 24 total
-- Mapped to phases: 0
-- Unmapped: 24 (pending roadmap creation)
+- Mapped to phases: 24
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-04*
-*Last updated: 2026-04-04 after initial definition*
+*Last updated: 2026-04-04 after roadmap creation*
