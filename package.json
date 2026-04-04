@@ -1,0 +1,30 @@
+{
+  "name": "librespin-install",
+  "version": "0.1.0",
+  "description": "Install LibreSpin hardware concept design skill pack for Claude Code",
+  "type": "module",
+  "bin": {
+    "librespin-install": "./bin/install.js"
+  },
+  "files": [
+    "bin/",
+    ".claude/"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "claude-code",
+    "hardware",
+    "pcb",
+    "electronics",
+    "concept-design",
+    "librespin"
+  ],
+  "author": "LibreSpin Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LibreSpin/LibreSpin"
+  }
+}
