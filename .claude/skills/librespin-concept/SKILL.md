@@ -136,8 +136,8 @@ After agent completes successfully:
 # With requirements file
 /librespin:concept --input requirements.yaml
 
-# Custom output directory and thorough research
-/librespin:concept --input reqs.yaml --output ./my-project/concepts/ --depth thorough
+# Thorough research depth
+/librespin:concept --input reqs.yaml --depth thorough
 
 # Resume existing project (state detected automatically)
 /librespin:concept
