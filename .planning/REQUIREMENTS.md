@@ -18,19 +18,19 @@ Requirements for initial release (Milestone 1). Each maps to roadmap phases.
 
 ### Skill Structure
 
-- [ ] **SKL-01**: Orchestrator lives at ~/.claude/skills/librespin/concept.md (skills/ format, not deprecated commands/)
-- [ ] **SKL-02**: Worker agent lives at ~/.claude/agents/librespin/AGENT.md with correct frontmatter (name, description, tools, color)
-- [ ] **SKL-03**: YAML templates installed to ~/.claude/librespin/templates/ (requirements.yaml, concept-template.md, overview-template.md)
-- [ ] **SKL-04**: Config schema supports draft_count, iteration_limit, confidence_threshold
+- [x] **SKL-01**: Orchestrator lives at ~/.claude/skills/librespin/concept.md (skills/ format, not deprecated commands/)
+- [x] **SKL-02**: Worker agent lives at ~/.claude/agents/librespin/AGENT.md with correct frontmatter (name, description, tools, color)
+- [x] **SKL-03**: YAML templates installed to ~/.claude/librespin/templates/ (requirements.yaml, concept-template.md, overview-template.md)
+- [x] **SKL-04**: Config schema supports draft_count, iteration_limit, confidence_threshold
 
 ### Namespace Port
 
-- [ ] **NSP-01**: Zero occurrences of "hw-concept" remain in installed skill files (all 81+ references replaced)
-- [ ] **NSP-02**: All agent output writes to .librespin/ directory (not .planning/hw-concept/)
-- [ ] **NSP-03**: State file persists at .librespin/state.md (not .planning/hw-concept-state.md)
-- [ ] **NSP-04**: All Tool references use "Agent" (not deprecated "Task" alias)
-- [ ] **NSP-05**: Dead --output DIR parameter either removed or fully wired to work
-- [ ] **NSP-06**: `/librespin:concept` command is accessible in Claude Code after install
+- [x] **NSP-01**: Zero occurrences of "hw-concept" remain in installed skill files (all 81+ references replaced)
+- [x] **NSP-02**: All agent output writes to .librespin/ directory (not .planning/hw-concept/)
+- [x] **NSP-03**: State file persists at .librespin/state.md (not .planning/hw-concept-state.md)
+- [x] **NSP-04**: All Tool references use "Agent" (not deprecated "Task" alias)
+- [x] **NSP-05**: Dead --output DIR parameter either removed or fully wired to work
+- [x] **NSP-06**: `/librespin:concept` command is accessible in Claude Code after install
 
 ### Concept Workflow
 
@@ -92,16 +92,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PKG-04 | Phase 1 | Pending |
 | PKG-05 | Phase 4 | Pending |
 | PKG-06 | Phase 4 | Pending |
-| SKL-01 | Phase 2 | Pending |
-| SKL-02 | Phase 2 | Pending |
-| SKL-03 | Phase 2 | Pending |
-| SKL-04 | Phase 2 | Pending |
-| NSP-01 | Phase 2 | Pending |
-| NSP-02 | Phase 2 | Pending |
-| NSP-03 | Phase 2 | Pending |
-| NSP-04 | Phase 2 | Pending |
-| NSP-05 | Phase 2 | Pending |
-| NSP-06 | Phase 2 | Pending |
+| SKL-01 | Phase 2 | Complete |
+| SKL-02 | Phase 2 | Complete |
+| SKL-03 | Phase 2 | Complete |
+| SKL-04 | Phase 2 | Complete |
+| NSP-01 | Phase 2 | Complete |
+| NSP-02 | Phase 2 | Complete |
+| NSP-03 | Phase 2 | Complete |
+| NSP-04 | Phase 2 | Complete |
+| NSP-05 | Phase 2 | Complete |
+| NSP-06 | Phase 2 | Complete |
 | CW-01 | Phase 3 | Pending |
 | CW-02 | Phase 3 | Pending |
 | CW-03 | Phase 3 | Pending |
