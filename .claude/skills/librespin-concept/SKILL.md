@@ -13,4 +13,4 @@ allowed-tools:
 
 # /librespin:concept
 
-TODO: Port from hw-concept in Phase 2.
+TODO: Implement in Phase 2.
