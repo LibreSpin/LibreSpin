@@ -42,7 +42,7 @@ Requirements for initial release (Milestone 1). Each maps to roadmap phases.
 - [ ] **CW-06**: Agent generates detailed block diagrams with MPNs and spec analysis (Phase 5)
 - [ ] **CW-07**: Agent self-critiques and refines concepts iteratively (Phases 6-8)
 - [ ] **CW-08**: Agent produces comparison matrix with recommended concept (Phase 9)
-- [ ] **CW-09**: Workflow state persists across invocations — user can resume interrupted runs
+- [x] **CW-09**: Workflow state persists across invocations — user can resume interrupted runs
 - [ ] **CW-10**: Completeness scoring works (critical/important/nice-to-have weighted at 50/30/20)
 
 ## v2 Requirements
@@ -110,7 +110,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CW-06 | Phase 3 | Pending |
 | CW-07 | Phase 3 | Pending |
 | CW-08 | Phase 3 | Pending |
-| CW-09 | Phase 3 | Pending |
+| CW-09 | Phase 3 | Complete |
 | CW-10 | Phase 3 | Pending |
 
 **Coverage:**
