@@ -83,7 +83,6 @@ Execute librespin-concept workflow.
 Parameters:
 - INPUT_FILE: [path or "interactive"]
 - DEPTH: [quick|medium|thorough]
-- PHASE: requirements
 
 Context files:
 @.librespin/config.yaml (if exists)
@@ -1057,7 +1056,21 @@ const requirementsYaml = yaml.dump(requirements, {
 fs.writeFileSync('.librespin/01-requirements/requirements.yaml', requirementsYaml);
 ```
 
-**2. Update state file** `.librespin/state.md`
+**2. Create config file** `.librespin/config.yaml` (if not exists)
+
+```javascript
+const configPath = '.librespin/config.yaml';
+if (!fs.existsSync(configPath)) {
+  const defaultConfig = yaml.dump({
+    draft_count: 5,
+    iteration_limit: 5,
+    confidence_threshold: 80
+  });
+  fs.writeFileSync(configPath, defaultConfig);
+}
+```
+
+**3. Update state file** `.librespin/state.md`
 
 Write with YAML frontmatter:
 
@@ -1088,7 +1101,7 @@ ${successCriteriaList}
 fs.writeFileSync('.librespin/state.md', stateContent);
 ```
 
-**3. Display summary to user:**
+**4. Display summary to user:**
 
 ```
 Requirements gathering complete.
@@ -1097,6 +1110,7 @@ Completeness: {score}/100
 Source: {interactive | yaml import}
 
 Requirements saved to: .librespin/01-requirements/requirements.yaml
+Config saved to: .librespin/config.yaml (draft_count: 5, iteration_limit: 5, confidence_threshold: 80)
 State updated: .librespin/state.md
 
 Success criteria ({N} defined):
@@ -1105,7 +1119,7 @@ Success criteria ({N} defined):
 Next: Run Phase 2 (Architecture Drafting) to generate {draft_count} concept architectures.
 ```
 
-**4. Return to orchestrator:**
+**5. Return to orchestrator:**
 
 Signal Phase 1 complete, state persisted, ready for Phase 2.
 
@@ -1526,6 +1540,14 @@ concepts.forEach(c => {
 });
 console.log(`  - overview.md`);
 console.log(`\nNext: Run Phase 1 (Validation Gate) to assess concept feasibility.`);
+```
+
+**Update state file** `.librespin/state.md` — set `phase` to `2-architecture-drafting`:
+
+```javascript
+const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
+const updatedState = existingState.replace(/^phase: .+$/m, `phase: '2-architecture-drafting'`);
+fs.writeFileSync('.librespin/state.md', updatedState);
 ```
 
 ### DESIGN GOALS
@@ -2999,7 +3021,13 @@ if (passed.length === 0 && borderline.length === 0) {
 **User decision required for borderline concepts.**
 ```
 
-**3. Update state file** `.librespin/state.md`
+**3. Update state file** `.librespin/state.md` — set `phase` to `3-validation-gate`:
+
+```javascript
+const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
+const updatedState = existingState.replace(/^phase: .+$/m, `phase: '3-validation-gate'`);
+fs.writeFileSync('.librespin/state.md', updatedState);
+```
 
 ### ERROR HANDLING
 
@@ -4495,6 +4523,14 @@ if (unverifiedParts.length > 0) {
 console.log(`\nNext: Run Phase 1 (Concept Generation) to finalize concept documentation.`);
 ```
 
+**Update state file** `.librespin/state.md` — set `phase` to `4-component-research`:
+
+```javascript
+const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
+const updatedState = existingState.replace(/^phase: .+$/m, `phase: '4-component-research'`);
+fs.writeFileSync('.librespin/state.md', updatedState);
+```
+
 ## PHASE 5: CONCEPT GENERATION
 
 Generate component-level ASCII block diagrams and specification gap analysis for validated concepts.
@@ -5118,6 +5154,14 @@ File structure:
 - Requirement ID mismatch: Warn and use loaded requirements
 - All concepts below 80%: Warn but continue, suggest revisiting requirements in Phase 1 output
 - Empty priority tier: Treat as 100% covered (no requirements = no gaps)
+
+**Update state file** `.librespin/state.md` — set `phase` to `5-concept-generation`:
+
+```javascript
+const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
+const updatedState = existingState.replace(/^phase: .+$/m, `phase: '5-concept-generation'`);
+fs.writeFileSync('.librespin/state.md', updatedState);
+```
 
 ## PHASE 6: SELF-CRITIQUE & REFINEMENT
 
@@ -6307,6 +6351,14 @@ function applyClosureAction(concept, action) {
 - **All concepts <70%:** Trigger handleAllFailScenario() with user suggestions
 - **No improvement possible:** Accept plateau and proceed to final output
 
+**Update state file** `.librespin/state.md` — set `phase` to `6-self-critique`:
+
+```javascript
+const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
+const updatedState = existingState.replace(/^phase: .+$/m, `phase: '6-self-critique'`);
+fs.writeFileSync('.librespin/state.md', updatedState);
+```
+
 ## PHASE 7: FINAL OUTPUT
 
 Generate final deliverables: comparison matrix, recommendation, and per-concept handoff folders.
@@ -7020,12 +7072,59 @@ Final output organization per CONTEXT.md:
 // - Vendor reference search fails: Proceed without references section
 ```
 
-## CURRENT PHASE: REQUIREMENTS GATHERING ONLY
+**Update state file** `.librespin/state.md` — set `phase` to `7-final-output`:
 
-For Phase 1 (Foundation), only Requirements Gathering is implemented.
-Phases 2-7 are designed but not yet executable.
+```javascript
+const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
+const updatedState = existingState.replace(/^phase: .+$/m, `phase: '7-final-output'`);
+fs.writeFileSync('.librespin/state.md', updatedState);
+```
 
-When invoked, execute Phase 1 logic, write requirements.yaml, report completion.
+## PHASE DISPATCH
+
+On each invocation, determine which phase to execute by reading `.librespin/state.md` frontmatter.
+
+**Dispatch rules:**
+
+| state.md `phase` value | Meaning | Execute Next |
+|------------------------|---------|--------------|
+| (no state file exists) | Fresh project | Phase 1: Requirements Gathering |
+| `3-requirements-gathering` | Phase 1 complete | Phase 2: Architecture Drafting |
+| `2-architecture-drafting` | Phase 2 complete | Phase 2.5 + Phase 3: Req-to-Component Mapping then Validation Gate |
+| `3-validation-gate` | Phase 3 complete | Phase 4: Component Research |
+| `4-component-research` | Phase 4 complete | Phase 5: Concept Generation |
+| `5-concept-generation` | Phase 5 complete | Phase 6: Self-Critique & Refinement |
+| `6-self-critique` | Phase 6 complete | Phase 7: Final Output |
+| `7-final-output` | All phases complete | Report completion, no further phases |
+
+**Implementation:**
+
+```
+Read .librespin/state.md frontmatter
+Extract `phase` field value
+
+if no state file OR phase is empty:
+  Execute PHASE 1: REQUIREMENTS GATHERING
+elif phase == "3-requirements-gathering":
+  Execute PHASE 2: ARCHITECTURE DRAFTING
+elif phase == "2-architecture-drafting":
+  Execute PHASE 2.5: REQUIREMENTS-TO-COMPONENT MAPPING
+  then Execute PHASE 3: VALIDATION GATE
+elif phase == "3-validation-gate":
+  Execute PHASE 4: COMPONENT RESEARCH
+elif phase == "4-component-research":
+  Execute PHASE 5: CONCEPT GENERATION
+elif phase == "5-concept-generation":
+  Execute PHASE 6: SELF-CRITIQUE & REFINEMENT
+elif phase == "6-self-critique":
+  Execute PHASE 7: FINAL OUTPUT
+elif phase == "7-final-output":
+  Report: "All phases complete. Output at .librespin/07-final-output/"
+else:
+  Error: "Unknown phase value: {phase}. Check .librespin/state.md"
+```
+
+**State update contract:** Each phase MUST update `.librespin/state.md` frontmatter `phase` field to its own phase value from the table above upon completion. This enables the next invocation to dispatch correctly.
 
 ## CONSTRAINTS
 
