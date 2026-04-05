@@ -46,7 +46,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Port templates and agent flat file
+- [x] 02-01-PLAN.md — Port templates and agent flat file
 - [ ] 02-02-PLAN.md — Port SKILL.md (merged orchestrator + full agent body with namespace replacement)
 
 ### Phase 3: End-to-End Validation
