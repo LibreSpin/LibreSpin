@@ -12,12 +12,11 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] npx installer distributes skill pack to ~/.claude/ — Validated in Phase 1: Package Scaffold
 
 ### Active
 
 - [ ] Hardware concept agent ported from hw-concept repo and packaged as LibreSpin skill
-- [ ] npx installer distributes skill pack to ~/.claude/
 - [ ] Concept agent works end-to-end: requirements interview through concept recommendation
 - [ ] LibreSpin outputs stored in .librespin/ (separate from GSD .planning/)
 - [ ] Existing hw-concept 9-phase workflow preserved (requirements, drafting, validation, component research, concept generation, self-critique, refinement, final generation, output)
@@ -82,7 +81,7 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 | Fork hw-concept, don't rewrite | It works. Port with minimal changes, refine in a later phase. Can't optimize what you haven't measured. | -- Pending |
 | One GSD milestone per version | Each version has distinct scope. Planning v4 before v2 exists would be speculative. | -- Pending |
 | .librespin/ for outputs | Avoids conflict with GSD .planning/. Clean separation of concerns. | -- Pending |
-| npx installer | Proven pattern (hw-concept uses it). Familiar to Node.js ecosystem. | -- Pending |
+| npx installer | Proven pattern (hw-concept uses it). Familiar to Node.js ecosystem. | Validated (Phase 1) |
 | CalcPad CE CLI wrapping | Token-efficient skill that knows exact commands. .NET 10 runtime acceptable as prerequisite. | -- Pending |
 
 ## Milestone Overview
@@ -116,4 +115,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-04 after initialization*
+*Last updated: 2026-04-04 after Phase 1 completion*
