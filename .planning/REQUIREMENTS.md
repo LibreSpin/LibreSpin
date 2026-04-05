@@ -34,8 +34,8 @@ Requirements for initial release (Milestone 1). Each maps to roadmap phases.
 
 ### Concept Workflow
 
-- [ ] **CW-01**: User can gather hardware requirements interactively via AskUserQuestion (Phase 1)
-- [ ] **CW-02**: User can provide requirements via YAML file import (Phase 1 alternate input)
+- [x] **CW-01**: User can gather hardware requirements interactively via AskUserQuestion (Phase 1)
+- [x] **CW-02**: User can provide requirements via YAML file import (Phase 1 alternate input)
 - [ ] **CW-03**: Agent generates 5-6 diverse architecture concepts from requirements (Phase 2)
 - [ ] **CW-04**: Agent validates concepts against confidence threshold with web research (Phase 3)
 - [ ] **CW-05**: Agent researches specific components with real part numbers and BOMs (Phase 4)
@@ -43,7 +43,7 @@ Requirements for initial release (Milestone 1). Each maps to roadmap phases.
 - [ ] **CW-07**: Agent self-critiques and refines concepts iteratively (Phases 6-8)
 - [ ] **CW-08**: Agent produces comparison matrix with recommended concept (Phase 9)
 - [x] **CW-09**: Workflow state persists across invocations — user can resume interrupted runs
-- [ ] **CW-10**: Completeness scoring works (critical/important/nice-to-have weighted at 50/30/20)
+- [x] **CW-10**: Completeness scoring works (critical/important/nice-to-have weighted at 50/30/20)
 
 ## v2 Requirements
 
@@ -102,8 +102,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NSP-04 | Phase 2 | Complete |
 | NSP-05 | Phase 2 | Complete |
 | NSP-06 | Phase 2 | Complete |
-| CW-01 | Phase 3 | Pending |
-| CW-02 | Phase 3 | Pending |
+| CW-01 | Phase 3 | Complete |
+| CW-02 | Phase 3 | Complete |
 | CW-03 | Phase 3 | Pending |
 | CW-04 | Phase 3 | Pending |
 | CW-05 | Phase 3 | Pending |
@@ -111,7 +111,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CW-07 | Phase 3 | Pending |
 | CW-08 | Phase 3 | Pending |
 | CW-09 | Phase 3 | Complete |
-| CW-10 | Phase 3 | Pending |
+| CW-10 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 26 total
