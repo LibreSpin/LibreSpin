@@ -18,19 +18,19 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-04)
+See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** A minimal, lightweight harness that makes Claude Code an expert hardware design assistant — the intelligence lives in the prompts, not in code.
-**Current focus:** Phase 01 — package-scaffold
+**Current focus:** Phase 02 — namespace-port
 
 ## Current Position
 
 Phase: 2
 Plan: Not started
-Status: Executing Phase 01
+Status: Ready to plan
 Last activity: 2026-04-05
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [████████████████████] 1/1 plans (100%)
 
 ## Performance Metrics
 
@@ -64,6 +64,8 @@ Recent decisions affecting current work:
 - Init: Fork hw-concept, port with minimal changes — no rewrite
 - Init: .librespin/ for all agent output (separate from GSD .planning/)
 - Init: skills/ install target from day one (not deprecated commands/)
+- Phase 1: Zero npm dependencies — pure Node.js stdlib for installer
+- Phase 1: Flat agent file pattern (agents/name.md not agents/name/AGENT.md)
 
 ### Pending Todos
 
@@ -76,6 +78,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-04T22:49:31.422Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-package-scaffold/01-CONTEXT.md
+Last session: 2026-04-05
+Stopped at: Phase 01 complete, ready to plan Phase 02
+Resume file: None
