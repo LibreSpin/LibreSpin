@@ -36,12 +36,12 @@ Requirements for initial release (Milestone 1). Each maps to roadmap phases.
 
 - [x] **CW-01**: User can gather hardware requirements interactively via AskUserQuestion (Phase 1)
 - [x] **CW-02**: User can provide requirements via YAML file import (Phase 1 alternate input)
-- [ ] **CW-03**: Agent generates 5-6 diverse architecture concepts from requirements (Phase 2)
-- [ ] **CW-04**: Agent validates concepts against confidence threshold with web research (Phase 3)
-- [ ] **CW-05**: Agent researches specific components with real part numbers and BOMs (Phase 4)
-- [ ] **CW-06**: Agent generates detailed block diagrams with MPNs and spec analysis (Phase 5)
-- [ ] **CW-07**: Agent self-critiques and refines concepts iteratively (Phases 6-8)
-- [ ] **CW-08**: Agent produces comparison matrix with recommended concept (Phase 9)
+- [x] **CW-03**: Agent generates 5-6 diverse architecture concepts from requirements (Phase 2)
+- [x] **CW-04**: Agent validates concepts against confidence threshold with web research (Phase 3)
+- [x] **CW-05**: Agent researches specific components with real part numbers and BOMs (Phase 4)
+- [x] **CW-06**: Agent generates detailed block diagrams with MPNs and spec analysis (Phase 5)
+- [x] **CW-07**: Agent self-critiques and refines concepts iteratively (Phases 6-8)
+- [x] **CW-08**: Agent produces comparison matrix with recommended concept (Phase 9)
 - [x] **CW-09**: Workflow state persists across invocations — user can resume interrupted runs
 - [x] **CW-10**: Completeness scoring works (critical/important/nice-to-have weighted at 50/30/20)
 
@@ -104,12 +104,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NSP-06 | Phase 2 | Complete |
 | CW-01 | Phase 3 | Complete |
 | CW-02 | Phase 3 | Complete |
-| CW-03 | Phase 3 | Pending |
-| CW-04 | Phase 3 | Pending |
-| CW-05 | Phase 3 | Pending |
-| CW-06 | Phase 3 | Pending |
-| CW-07 | Phase 3 | Pending |
-| CW-08 | Phase 3 | Pending |
+| CW-03 | Phase 3 | Complete |
+| CW-04 | Phase 3 | Complete |
+| CW-05 | Phase 3 | Complete |
+| CW-06 | Phase 3 | Complete |
+| CW-07 | Phase 3 | Complete |
+| CW-08 | Phase 3 | Complete |
 | CW-09 | Phase 3 | Complete |
 | CW-10 | Phase 3 | Complete |
 
