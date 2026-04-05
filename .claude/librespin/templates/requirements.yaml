@@ -1,5 +1,121 @@
-# LibreSpin Requirements Template
-# TODO: Implement in Phase 2
----
-project_name: ""
-requirements: []
+# Hardware Concept Requirements Schema
+# Copy this file and fill in your project details
+
+schema_version: 1  # Required for compatibility checking
+
+# =============================================================================
+# REQUIRED (must specify for concept generation)
+# =============================================================================
+
+project_name: "Example IoT Sensor Node"
+
+use_case: |
+  Remote environmental monitoring for agricultural fields.
+  Measures soil moisture and temperature, uploads data hourly.
+
+environment:
+  location: outdoor          # indoor | outdoor | harsh
+  temperature_min_c: -20
+  temperature_max_c: 50
+  moisture: yes              # exposed to rain/humidity
+  mounting: pole-mounted
+
+connectivity:
+  primary: LoRaWAN           # WiFi | BLE | LoRaWAN | cellular | Zigbee | none
+  region: US915              # EU868 | US915 | AU915 | AS923 | etc
+  upload_frequency: hourly   # realtime | per-minute | hourly | daily
+
+power:
+  source: battery            # battery | wall | solar | usb | poe
+  battery_life_target: 12 months
+  # If battery: specify type if known
+  battery_type: 2xAA         # optional: 18650 | 2xAA | LiPo | coin-cell
+
+# =============================================================================
+# IMPORTANT (strongly recommended)
+# =============================================================================
+
+sensors:
+  - type: soil_moisture
+    interface: analog        # optional: analog | i2c | spi | uart
+  - type: temperature
+    accuracy: "±0.5°C"       # optional
+
+# For projects with SPI/UART/I2C interface devices (bridge ICs, etc.)
+# Uncomment and populate the interfaces section:
+#
+# interfaces:
+#   spi_channels:
+#     - name: "SPI Channel 1"
+#       type: standard           # standard | quad-spi
+#       mode: 1                  # 0-3 (CPOL/CPHA configuration)
+#       gpio_count: 4            # number of GPIO pins needed
+#       data_rate_mbps: 20       # target data rate
+#       location: offboard       # onboard | offboard
+#       connector: "IDC ribbon"  # connector type
+#       power_requirement:       # REQUIRED for onboard devices
+#         voltage: "3.3V"        # supply voltage (e.g., "5V", "12V", "3.3V")
+#         current: "100mA"       # max current draw (e.g., "100mA", "2A")
+#         notes: "Low-power SPI device"  # optional: special requirements
+#       notes: "Off-board device, externally powered"
+#
+#   uart_channels:
+#     - name: "UART to Device"
+#       device: "Device Name"    # specific part number if known
+#       data_rate_kbps: 115.2    # baud rate
+#       location: onboard        # onboard | offboard
+#       connector: "Molex"       # connector type
+#       power_requirement:       # REQUIRED for onboard devices
+#         voltage: "12V"         # supply voltage required by device
+#         current: "2000mA"      # max current draw (check datasheet!)
+#         notes: "High-power device requires dedicated 12V rail"
+#       notes: "Embedded on PCB"
+#
+#   i2c_channels:
+#     - name: "I2C Sensor Bus"
+#       speed_khz: 400           # 100 (standard) | 400 (fast) | 1000 (fast+)
+#       device_count: 3          # number of devices on bus
+#       location: offboard       # onboard | offboard
+#       power_requirement:       # REQUIRED for onboard devices
+#         voltage: "3.3V"
+#         current: "50mA"
+#         notes: "Shared bus power budget"
+#       notes: "Multiple sensors on shared bus"
+
+hmi:
+  buttons: 1                 # count, or 0/none
+  leds: 2                    # count: 1 power, 1 status
+  display: none              # none | oled-128x64 | lcd-16x2 | epaper
+
+physical:
+  max_pcb_size_mm: "50x30"   # WxL or "no constraint"
+  enclosure: "IP65 plastic"  # optional
+  connectors:
+    - type: JST-PH
+      purpose: battery
+    - type: screw-terminal
+      purpose: sensor-wires
+
+# =============================================================================
+# NICE-TO-HAVE (optional, improves concept quality)
+# =============================================================================
+
+production:
+  volume: 50                 # expected units
+  bom_target_usd: 25         # per-unit target
+
+compliance:
+  - FCC                      # list applicable: FCC | CE | UL | RoHS
+
+lifecycle:
+  years: 5                   # how long parts should be available
+
+timeline:
+  urgency: normal            # urgent | normal | flexible
+
+preferences:
+  preferred_vendors:
+    - STMicroelectronics
+    - Nordic
+  avoid_vendors: []
+  notes: "Prefer parts available on JLCPCB assembly"
