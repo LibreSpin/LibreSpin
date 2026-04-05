@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 1 plan
 
 Plans:
-- [ ] 01-01-PLAN.md — Package scaffold: cleanup, config files, placeholders, and installer
+- [x] 01-01-PLAN.md — Package scaffold: cleanup, config files, placeholders, and installer
 
 ### Phase 2: Namespace Port
 **Goal**: All hw-concept content lives under the librespin namespace with no residual hw-concept strings in installed files
