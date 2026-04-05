@@ -43,7 +43,11 @@ Plans:
   3. Worker agent at `~/.claude/agents/librespin-concept.md` has correct frontmatter (name: librespin-concept, description, tools, color)
   4. YAML templates are installed to `~/.claude/librespin/templates/` and config schema supports draft_count, iteration_limit, confidence_threshold
   5. All agent output paths reference `.librespin/` and all Tool references use `Agent` (not deprecated `Task`); the dead `--output DIR` parameter is either removed or fully wired
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Port templates and agent flat file
+- [ ] 02-02-PLAN.md — Port SKILL.md (merged orchestrator + full agent body with namespace replacement)
 
 ### Phase 3: End-to-End Validation
 **Goal**: The ported concept agent completes all 9 workflow phases correctly for both interactive and file-based input modes
@@ -77,6 +81,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Package Scaffold | 0/1 | Planning complete | - |
-| 2. Namespace Port | 0/? | Not started | - |
+| 2. Namespace Port | 0/2 | Planning complete | - |
 | 3. End-to-End Validation | 0/? | Not started | - |
 | 4. Distribution and Docs | 0/? | Not started | - |
