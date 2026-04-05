@@ -1,0 +1,16 @@
+schema_version: 1
+project_name: "LED Driver Test"
+use_case: |
+  Constant-current LED driver for a 12V LED strip.
+environment:
+  location: indoor
+  temperature_min_c: 15
+  temperature_max_c: 40
+connectivity:
+  primary: none
+  region: "N/A"
+  port_count: 0
+  hub_acceptable: false
+power:
+  source: wall
+  battery_life_target: "N/A"
