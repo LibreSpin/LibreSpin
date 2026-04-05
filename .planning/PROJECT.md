@@ -13,10 +13,9 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 ### Validated
 
 - [x] npx installer distributes skill pack to ~/.claude/ — Validated in Phase 1: Package Scaffold
+- [x] Hardware concept agent ported from hw-concept repo and packaged as LibreSpin skill — Validated in Phase 2: Namespace Port
 
 ### Active
-
-- [ ] Hardware concept agent ported from hw-concept repo and packaged as LibreSpin skill
 - [ ] Concept agent works end-to-end: requirements interview through concept recommendation
 - [ ] LibreSpin outputs stored in .librespin/ (separate from GSD .planning/)
 - [ ] Existing hw-concept 9-phase workflow preserved (requirements, drafting, validation, component research, concept generation, self-critique, refinement, final generation, output)
@@ -77,8 +76,8 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Pure Claude Code skill pack (Option A) | Maximizes minimalism. Intelligence in prompts, not code. GSD proves pattern scales. | -- Pending |
-| Fork hw-concept, don't rewrite | It works. Port with minimal changes, refine in a later phase. Can't optimize what you haven't measured. | -- Pending |
+| Pure Claude Code skill pack (Option A) | Maximizes minimalism. Intelligence in prompts, not code. GSD proves pattern scales. | Validated (Phase 2) |
+| Fork hw-concept, don't rewrite | It works. Port with minimal changes, refine in a later phase. Can't optimize what you haven't measured. | Validated (Phase 2) |
 | One GSD milestone per version | Each version has distinct scope. Planning v4 before v2 exists would be speculative. | -- Pending |
 | .librespin/ for outputs | Avoids conflict with GSD .planning/. Clean separation of concerns. | -- Pending |
 | npx installer | Proven pattern (hw-concept uses it). Familiar to Node.js ecosystem. | Validated (Phase 1) |
@@ -115,4 +114,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-04 after Phase 1 completion*
+*Last updated: 2026-04-05 after Phase 2 completion*
