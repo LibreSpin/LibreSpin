@@ -100,3 +100,17 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 5 to break down)
+
+## Backlog
+
+### Phase 999.1: Auto-chain phases in librespin-concept (BACKLOG)
+
+**Goal:** Eliminate the need to re-invoke `/librespin:concept` between phases. Current friction: user must run the skill once per phase manually.
+**Options:**
+- A: Explicit `--phase N` flag for direct control
+- B: Fully automatic chaining with optional bail-out checkpoint between phases
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)
