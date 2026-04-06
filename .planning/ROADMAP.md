@@ -114,3 +114,14 @@ Plans:
 
 Plans:
 - [ ] TBD (promote with /gsd:review-backlog when ready)
+
+### Phase 999.2: Split SKILL.md into per-phase files loaded on demand (BACKLOG)
+
+**Goal:** Reduce the 239KB / ~58k token SKILL.md to a lean dispatcher that loads only the relevant phase file at runtime. Each of the 9 phases becomes its own file under `skills/librespin-concept/phases/`.
+**Why:** Every invocation currently loads the full 7200-line file into context before doing any work. Will eventually crowd out working context as the skill grows.
+**Trigger:** Promote when context pressure symptoms appear (truncated output, phase logic errors late in workflow) or when adding significant new phase content.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)
