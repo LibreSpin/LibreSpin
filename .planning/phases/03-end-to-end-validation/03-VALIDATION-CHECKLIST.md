@@ -138,11 +138,16 @@ Evidence capture for CW-01 through CW-10.
 ## CW-10: Completeness Scoring
 - [x] Ran with complete YAML (requirements-complete.yaml): score >= 70, no gap-fill triggered
 - [x] Scoring breakdown available (critical/important/nice-to-have)
-- Evidence: state.md shows `completeness_score: 98` for requirements-complete.yaml input
-- Evidence: source: yaml confirms YAML import path executed
-- Blocking bugs found: none
-- Note: Gap-fill path (stripped YAML below 70) validated by checklist design; live execution of stripped YAML requires interactive session for AskUserQuestion calls
-- **Status: VALIDATED (happy path confirmed; gap-fill path by design review)**
+- [x] Ran with stripped YAML (requirements-stripped.yaml): initial score below 70
+- [x] Gap-fill AskUserQuestion prompts appeared for missing important fields (sensors, hmi, physical)
+- [x] Recalculated score >= 70 after gap-fill answers provided
+- Evidence: stripped YAML initial score: **50/100** (critical fields only: use_case, environment, connectivity, power)
+- Evidence: gap-fill triggered for 6 important fields (sensors, buttons, LEDs, display, PCB size, enclosure)
+- Evidence: recalculated score after gap-fill: **86/100** — above 70 threshold, Phase 1 completed
+- Evidence: state.md shows `completeness_score: 86`, `source: yaml`
+- Evidence: state.md shows `completeness_score: 98` for requirements-complete.yaml (happy path, no gap-fill)
+- Bug found: background agent cannot surface AskUserQuestion — gap-fill stalled silently. Fixed: SKILL.md now requires `run_in_background=false` (commit 0298015)
+- **Status: VALIDATED** (happy path + gap-fill path both confirmed live 2026-04-05)
 
 ## Bug Fixes Applied
 | Bug | CW Affected | Fix Description | File Changed |

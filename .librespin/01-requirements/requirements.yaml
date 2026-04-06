@@ -1,63 +1,29 @@
 schema_version: 1
-project_name: "Example IoT Sensor Node"
-
+project_name: "LED Driver Test"
 use_case: |
-  Remote environmental monitoring for agricultural fields.
-  Measures soil moisture and temperature, uploads data hourly.
-
+  Constant-current LED driver for a 12V LED strip.
 environment:
-  location: outdoor
-  temperature_min_c: -20
-  temperature_max_c: 50
-  moisture: yes
-  mounting: pole-mounted
-
+  location: indoor
+  temperature_min_c: 15
+  temperature_max_c: 40
 connectivity:
-  primary: LoRaWAN
-  region: US915
-  upload_frequency: hourly
-
+  primary: none
+  region: "N/A"
+  port_count: 0
+  hub_acceptable: false
 power:
-  source: battery
-  battery_life_target: 12 months
-  battery_type: 2xAA
-
+  source: wall
+  battery_life_target: "N/A"
 sensors:
-  - type: soil_moisture
-    interface: analog
-  - type: temperature
-    accuracy: "±0.5°C"
-
+  - type: current_sense
+    notes: "Monitor output current for constant-current regulation"
 hmi:
   buttons: 1
-  leds: 2
+  leds: 1
   display: none
-
 physical:
-  max_pcb_size_mm: "50x30"
-  enclosure: "IP65 plastic"
-  connectors:
-    - type: JST-PH
-      purpose: battery
-    - type: screw-terminal
-      purpose: sensor-wires
-
+  max_pcb_size_mm: "50x50"
+  enclosure: basic_plastic
 production:
-  volume: 50
-  bom_target_usd: 25
-
-compliance:
-  - FCC
-
-lifecycle:
-  years: 5
-
-timeline:
-  urgency: normal
-
-preferences:
-  preferred_vendors:
-    - STMicroelectronics
-    - Nordic
-  avoid_vendors: []
-  notes: "Prefer parts available on JLCPCB assembly"
+  volume: prototype
+  bom_target_usd: 10
