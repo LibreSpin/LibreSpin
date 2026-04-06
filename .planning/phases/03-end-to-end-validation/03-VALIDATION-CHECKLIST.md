@@ -3,15 +3,16 @@
 Evidence capture for CW-01 through CW-10.
 
 ## CW-01: Interactive Requirements Gathering
-- [ ] Ran `/librespin:concept` without --input flag
-- [ ] Agent used AskUserQuestion to ask requirements questions
-- [ ] Progressive disclosure: critical -> important -> nice-to-have sections visible
-- [ ] Phase 1 completed successfully
-- Evidence: `.librespin/state.md` shows `phase: '3-requirements-gathering'`
-- Evidence: `.librespin/01-requirements/requirements.yaml` exists with gathered data
-- Evidence: `.librespin/config.yaml` exists with defaults
+- [x] Ran `/librespin:concept` without --input flag
+- [x] Agent used AskUserQuestion to ask requirements questions
+- [x] Progressive disclosure: critical -> important -> nice-to-have sections visible ("Critical (1/3) → Important (2/3) → Nice-to-have (3/3)" displayed)
+- [x] Phase 1 completed successfully
+- Evidence: `.librespin/state.md` shows `source: interactive`, `completeness_score: 80`
+- Evidence: `.librespin/01-requirements/requirements.yaml` written (57 lines, environmental monitoring project)
+- Evidence: `.librespin/config.yaml` written with defaults (draft_count: 5, iteration_limit: 5, confidence_threshold: 80)
+- Evidence: Live run 2026-04-05 — AskUserQuestion prompted for critical (5 questions), important (4 questions), nice-to-have (optional, user skipped)
 - Blocking bugs found: none
-- **Status: VALIDATED IN PLAN 03-02** (interactive mode requires live Claude Code session; YAML import path used for 03-03 end-to-end run)
+- **Status: VALIDATED** (live interactive session confirmed 2026-04-05)
 
 ## CW-02: YAML File Import
 - [ ] Ran `/librespin:concept --input .librespin/test-fixtures/requirements-complete.yaml`
