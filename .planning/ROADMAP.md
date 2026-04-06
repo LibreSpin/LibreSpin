@@ -90,3 +90,13 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 2. Namespace Port | 2/2 | Complete   | 2026-04-05 |
 | 3. End-to-End Validation | 3/4 | Gap closure |  |
 | 4. Distribution and Docs | 0/? | Not started | - |
+
+### Phase 5: draw.io CLI skill for professional block and architecture diagrams
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 4
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 5 to break down)
