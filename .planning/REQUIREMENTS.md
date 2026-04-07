@@ -11,7 +11,7 @@ Requirements for initial release (Milestone 1). Each maps to roadmap phases.
 
 - [ ] **PKG-01**: User can install LibreSpin skill pack via `npx librespin-install` to ~/.claude/
 - [x] **PKG-02**: User can uninstall LibreSpin cleanly (all installed files removed)
-- [ ] **PKG-03**: Repository includes README with quick-start instructions (install, first run, what to expect)
+- [x] **PKG-03**: Repository includes README with quick-start instructions (install, first run, what to expect)
 - [ ] **PKG-04**: package.json has correct metadata (name, version, license, bin entry)
 - [ ] **PKG-05**: `.claude-plugin/plugin.json` manifest exists with correct name, description, and version
 - [ ] **PKG-06**: Repository serves as a Claude Code plugin — `/plugin marketplace add LibreSpin/LibreSpin` then `/plugin install librespin` works and installs skills/agents/templates
@@ -88,7 +88,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | PKG-01 | Phase 1 | Pending |
 | PKG-02 | Phase 4 | Complete |
-| PKG-03 | Phase 4 | Pending |
+| PKG-03 | Phase 4 | Complete |
 | PKG-04 | Phase 1 | Pending |
 | PKG-05 | Phase 4 | Pending |
 | PKG-06 | Phase 4 | Pending |

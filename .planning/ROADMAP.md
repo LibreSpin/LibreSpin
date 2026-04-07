@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Package Scaffold** - npm package + npx installer with correct Claude Code directory layout
 - [x] **Phase 2: Namespace Port** - Port all hw-concept content to librespin namespace with skill structure (completed 2026-04-05)
 - [ ] **Phase 3: End-to-End Validation** - Verify all 9 workflow phases work correctly after the port
-- [ ] **Phase 4: Distribution and Docs** - Plugin marketplace, uninstall support, README, and optional npm publish
+- [x] **Phase 4: Distribution and Docs** - Plugin marketplace, uninstall support, README, and optional npm publish (completed 2026-04-07)
 
 ## Phase Details
 
@@ -77,12 +77,12 @@ Plans:
   3. Running `npx librespin-install --uninstall` (or equivalent) removes all installed files from ~/.claude/ cleanly
   4. README includes marketplace install command (primary), npx install command (secondary), prerequisites, first-run walkthrough, and what to expect
   5. Skill/agent/template files live at repo root in plugin-compatible layout (`skills/`, `agents/`, etc.)
-**Plans:** 1/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 04-01-PLAN.md — Migrate files to repo root, update installer with --uninstall, fix package.json files array
-- [ ] 04-02-PLAN.md — Create .claude-plugin/plugin.json and marketplace.json manifests
-- [ ] 04-03-PLAN.md — Replace README.md with quick-start documentation
+- [x] 04-02-PLAN.md — Create .claude-plugin/plugin.json and marketplace.json manifests
+- [x] 04-03-PLAN.md — Replace README.md with quick-start documentation
 
 ## Progress
 
@@ -94,7 +94,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Package Scaffold | 0/1 | Planning complete | - |
 | 2. Namespace Port | 2/2 | Complete   | 2026-04-05 |
 | 3. End-to-End Validation | 3/4 | Gap closure |  |
-| 4. Distribution and Docs | 1/3 | In Progress|  |
+| 4. Distribution and Docs | 3/3 | Complete   | 2026-04-07 |
 
 ### Phase 5: draw.io CLI skill for professional block and architecture diagrams
 
