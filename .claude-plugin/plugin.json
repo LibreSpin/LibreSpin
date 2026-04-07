@@ -1,0 +1,9 @@
+{
+  "name": "librespin",
+  "version": "0.1.0",
+  "description": "AI-driven hardware concept design workflow for Claude Code",
+  "license": "MIT",
+  "repository": "https://github.com/LibreSpin/LibreSpin",
+  "homepage": "https://librespin.org",
+  "keywords": ["pcb", "eda", "kicad", "hardware", "electronics"]
+}
