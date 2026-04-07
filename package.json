@@ -8,7 +8,9 @@
   },
   "files": [
     "bin/",
-    ".claude/"
+    "skills/",
+    "agents/",
+    "librespin/"
   ],
   "engines": {
     "node": ">=18.0.0"
