@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 04-03-PLAN.md (README quick-start documentation)
-last_updated: "2026-04-07T23:39:23.008Z"
+stopped_at: Completed 04-02-PLAN.md (plugin.json and marketplace.json manifests)
+last_updated: "2026-04-07T23:39:28.233Z"
 last_activity: 2026-04-07
 progress:
   total_phases: 7
@@ -87,6 +87,8 @@ Recent decisions affecting current work:
 - [Phase 04-distribution-and-docs]: D-02: sourceBase repointed to join(__dirname, '..') — single change corrects all three cp() paths automatically
 - [Phase 04-distribution-and-docs]: D-07: INSTALL_ITEMS hardcoded list pattern for uninstall — minimal v1 approach, no manifest tracking needed
 - [Phase 04-distribution-and-docs]: README scoped to quick-start only (D-10) — no troubleshooting or config options; those are v2 docs
+- [Phase 04-distribution-and-docs]: source=. in marketplace.json — repo is both marketplace and plugin source; avoids double-clone pitfall
+- [Phase 04-distribution-and-docs]: No version field in marketplace.json — version lives only in plugin.json to prevent silent override
 
 ### Roadmap Evolution
 
@@ -103,6 +105,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-07T23:39:10.808Z
-Stopped at: Completed 04-03-PLAN.md (README quick-start documentation)
+Last session: 2026-04-07T23:39:28.228Z
+Stopped at: Completed 04-02-PLAN.md (plugin.json and marketplace.json manifests)
 Resume file: None
