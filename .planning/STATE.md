@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-03-PLAN.md (end-to-end validation CW-03 through CW-08)
-last_updated: "2026-04-06T01:56:29.753Z"
-last_activity: 2026-04-06
+stopped_at: Completed 04-01-PLAN.md (file migration + installer uninstall + package.json update)
+last_updated: "2026-04-07T23:36:16.023Z"
+last_activity: 2026-04-07
 progress:
   total_phases: 7
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 10
+  completed_plans: 8
   percent: 100
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** A minimal, lightweight harness that makes Claude Code an expert hardware design assistant — the intelligence lives in the prompts, not in code.
-**Current focus:** Phase 03 — end-to-end-validation
+**Current focus:** Phase 04 — distribution-and-docs
 
 ## Current Position
 
-Phase: 05
-Plan: Not started
-Status: Executing Phase 03
-Last activity: 2026-04-06
+Phase: 04 (distribution-and-docs) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-04-07
 
 Progress: [████████████████████] 1/1 plans (100%)
 
@@ -57,6 +57,7 @@ Progress: [████████████████████] 1/1 pla
 | Phase 03-end-to-end-validation P01 | 18 | 1 tasks | 1 files |
 | Phase 03-end-to-end-validation P02 | 2 | 1 tasks | 3 files |
 | Phase 03-end-to-end-validation P03 | 60 | 2 tasks | 30 files |
+| Phase 04-distribution-and-docs P01 | 3 | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,9 @@ Recent decisions affecting current work:
 - [Phase 03-end-to-end-validation]: Stripped fixture includes connectivity.region/port_count/hub_acceptable set to N/A to test scoring behavior for non-wireless projects
 - [Phase 03-end-to-end-validation]: Concept A (STM32L053 + RFM95W) recommended as best quality score (92) and lowest BOM cost; Concept D runner-up for no-FCC-budget scenarios
 - [Phase 03-end-to-end-validation]: OPT-01 (SKILL.md split) deferred — context pressure not observed through Phase 7; low priority for v2
+- [Phase 04-distribution-and-docs]: D-01/D-05: Moved distributable files from .claude/ to repo root via git mv for plugin marketplace compatibility
+- [Phase 04-distribution-and-docs]: D-02: sourceBase repointed to join(__dirname, '..') — single change corrects all three cp() paths automatically
+- [Phase 04-distribution-and-docs]: D-07: INSTALL_ITEMS hardcoded list pattern for uninstall — minimal v1 approach, no manifest tracking needed
 
 ### Roadmap Evolution
 
@@ -96,6 +100,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-05T01:59:26.459Z
-Stopped at: Completed 03-03-PLAN.md (end-to-end validation CW-03 through CW-08)
+Last session: 2026-04-07T23:36:16.019Z
+Stopped at: Completed 04-01-PLAN.md (file migration + installer uninstall + package.json update)
 Resume file: None
