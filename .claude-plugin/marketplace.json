@@ -1,0 +1,13 @@
+{
+  "name": "librespin",
+  "owner": {
+    "name": "LibreSpin Contributors"
+  },
+  "plugins": [
+    {
+      "name": "librespin",
+      "source": ".",
+      "description": "AI-driven hardware concept design workflow for Claude Code"
+    }
+  ]
+}
