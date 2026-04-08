@@ -4,7 +4,7 @@ milestone: v0.2
 milestone_name: CalcPad & NGSpice
 status: verifying
 stopped_at: Completed 07-02-PLAN.md — E2E fixture + ngspice validation complete, Phase 7 done
-last_updated: "2026-04-08T20:43:57.697Z"
+last_updated: "2026-04-08T20:46:47.243Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 4
@@ -25,8 +25,8 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 ## Current Position
 
-Phase: 07 (ngspice-simulation-skill) — EXECUTING
-Plan: 2 of 2
+Phase: 8
+Plan: Not started
 Status: Phase complete — ready for verification
 Last activity: 2026-04-08
 
