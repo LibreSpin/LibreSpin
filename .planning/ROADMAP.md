@@ -42,7 +42,7 @@
   4. `Calcpad.Server` REST API tested — `POST /api/calcpad/convert` returns computed results via `curl`
   5. Go/no-go decision recorded in `.librespin/spike-calcpad.md` with recommended approach for Phase 6
 **Plans**: 3 plans
-- [ ] 05-01-PLAN.md — Install .NET 10 SDK and build CalcpadCE CLI + Server binaries
+- [x] 05-01-PLAN.md — Install .NET 10 SDK and build CalcpadCE CLI + Server binaries
 - [ ] 05-02-PLAN.md — Run headless CLI test and REST API test, capture evidence
 - [ ] 05-03-PLAN.md — Write spike-calcpad.md decision report and human review checkpoint
 
@@ -90,7 +90,7 @@
 | 2. Namespace Port | v0.1 | 2/2 | Complete | 2026-04-05 |
 | 3. End-to-End Validation | v0.1 | 4/4 | Complete | 2026-04-06 |
 | 4. Distribution and Docs | v0.1 | 3/3 | Complete | 2026-04-07 |
-| 5. CalcPad CE Spike | v0.2 | 0/3 | Planned | - |
+| 5. CalcPad CE Spike | v0.2 | 1/3 | In Progress|  |
 | 6. CalcPad CE Skill | v0.2 | 0/? | Not started | - |
 | 7. NGSpice Simulation Skill | v0.2 | 0/? | Not started | - |
 | 8. Installer Update | v0.2 | 0/? | Not started | - |
