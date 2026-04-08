@@ -17,3 +17,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Local plugin marketplace for testing unpushed changes (see CLAUDE.md)
+local-marketplace/
