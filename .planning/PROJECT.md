@@ -82,7 +82,8 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 | npx installer | Proven pattern (hw-concept uses it). Familiar to Node.js ecosystem. | ✓ Validated — install/uninstall round-trip works |
 | Plugin marketplace as primary distribution | Integrated into Claude Code UI — no terminal required. `source: "."` was invalid; needed `{"source":"url","url":"..."}` | ✓ Validated — marketplace add + plugin install works |
 | skills/concept/ not skills/librespin-concept/ | Avoids plugin namespace collision (`librespin/` dir caused recursive cache install) | ✓ Validated — `/librespin:concept` works cleanly |
-| CalcPad CE CLI wrapping | Token-efficient skill. .NET 10 runtime acceptable as prerequisite. | — Pending (v0.2) |
+| CalcPad CE CLI wrapping | Token-efficient skill. .NET 10 runtime acceptable as prerequisite. | ✓ Spike passed — CLI-first path confirmed, REST fallback working (Phase 5) |
+| CalcpadCE Linux build | Must build from source (no pre-built .deb). One required patch to CalcpadService.cs. Binary name is `Cli` not `Calcpad.Cli`. | ✓ Validated — Phase 5 spike. Phase 6 PRs upstream required. |
 
 ## Milestone Overview
 
@@ -122,4 +123,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-08 — v0.2 milestone started*
+*Last updated: 2026-04-08 — Phase 5 (CalcPad CE spike) complete. GO verdict. Phase 6 planning unblocked.*
