@@ -22,8 +22,8 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 
 ### Active
 
-- [ ] CalcPad CE CLI skill (`/librespin:calcpad`) — v0.2
-- [ ] NGSpice simulation skill (`/librespin:simulate`) — v0.2
+- ✓ CalcPad CE CLI skill (`/librespin:calcpad`) — v0.2 — Validated in Phase 6: CLI-first path, .control+wrdata output contract, foreground-agent pattern
+- ✓ NGSpice simulation skill (`/librespin:simulate`) — v0.2 — Validated in Phase 7: ngspice-42, V(2)=2.977 V happy path, ERR-1/ERR-2 pattern matching confirmed
 - [ ] SKILL.md split into per-phase files to reduce 239KB context pressure — v2 (backlog 999.2)
 - [ ] Auto-chain phases (eliminate re-invoke between phases) — v2 (backlog 999.1)
 
@@ -123,4 +123,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-08 — Phase 6 (CalcPad CE skill) complete. `/librespin:calcpad` skill delivered. LibreSpin/CalcpadCE fork live at v0.1.0-librespin. Phase 7 (NGSpice simulation skill) unblocked.*
+*Last updated: 2026-04-08 — Phase 7 (NGSpice simulation skill) complete. `/librespin:simulate` skill delivered (`skills/simulate/SKILL.md` + `agents/simulate.md`). SIM-01..SIM-10 all validated. Phase 8 (installer update) is next.*
