@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-04-08T15:08:55.180Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-04-08T15:14:35.502Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 ## Current Position
 
 Phase: 05 (calcpad-ce-spike) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-08
 
@@ -67,6 +67,9 @@ v0.2 roadmap decisions:
 - [Phase 05]: CalcpadCE CLI binary named 'Cli' on Linux (not 'Calcpad.Cli') — Phase 6 skill must use correct name
 - [Phase 05]: Calcpad.Server targets net10.0 confirmed; AuthSettings API removed from MacroParser in active dev — workaround: delete optional block from CalcpadService.cs
 - [Phase 05]: dotnet-install.sh to /tmp/dotnet10 avoids sudo requirement in agent env; binaries are self-contained so no dotnet needed at runtime
+- [Phase 05]: Server port is not always 8080 — read from startup log at runtime; Phase 6 skill must parse 'Now listening on:' line
+- [Phase 05]: CLI success detection: exit code + output file existence, not stdout parsing (silent with -s flag)
+- [Phase 05]: Both CLI and REST paths confirmed working — Phase 6 go/no-go: GO on both integration strategies
 
 ### Roadmap Evolution
 
@@ -82,6 +85,6 @@ CRITICAL (Phase 5 spike): CalcPad CE Linux binary availability unconfirmed — n
 
 ## Session Continuity
 
-Last session: 2026-04-08T15:08:55.176Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-04-08T15:14:35.498Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
