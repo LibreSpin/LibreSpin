@@ -62,16 +62,16 @@ Requirements for Milestone 2 (v0.2 — CalcPad & NGSpice). Phases 5–8.
 
 ### NGSpice Simulation Skill
 
-- [ ] **SIM-01**: Skill verifies NGSpice prerequisite (ngspice in PATH) and provides install instructions if absent
-- [ ] **SIM-02**: Skill reads component values from `.librespin/08-calculations/` and generates a syntactically valid `.cir` SPICE netlist
-- [ ] **SIM-03**: Skill selects appropriate analysis type (`.op` / `.tran` / `.ac` / `.dc`) based on circuit type or user selection
-- [ ] **SIM-04**: Skill runs `ngspice -b circuit.cir` in batch mode and detects errors by scanning stdout/stderr (not exit code)
-- [ ] **SIM-05**: Skill diagnoses convergence failures with specific remediation suggestions (Timestep too small, singular matrix, etc.)
-- [ ] **SIM-06**: Skill parses simulation output via `.control` + `wrdata` and presents scalar results summary
-- [ ] **SIM-07**: Skill validates simulation results against design spec and suggests specific component change when spec is missed
-- [ ] **SIM-08**: Skill generates a matplotlib waveform plot and saves PNG to `.librespin/09-simulation/` (optional — requires Python + matplotlib)
-- [ ] **SIM-09**: User reviews and approves simulation results before marking complete (human review gate)
-- [ ] **SIM-10**: Skill saves netlist and results to `.librespin/09-simulation/`
+- [x] **SIM-01**: Skill verifies NGSpice prerequisite (ngspice in PATH) and provides install instructions if absent
+- [x] **SIM-02**: Skill reads component values from `.librespin/08-calculations/` and generates a syntactically valid `.cir` SPICE netlist
+- [x] **SIM-03**: Skill selects appropriate analysis type (`.op` / `.tran` / `.ac` / `.dc`) based on circuit type or user selection
+- [x] **SIM-04**: Skill runs `ngspice -b circuit.cir` in batch mode and detects errors by scanning stdout/stderr (not exit code)
+- [x] **SIM-05**: Skill diagnoses convergence failures with specific remediation suggestions (Timestep too small, singular matrix, etc.)
+- [x] **SIM-06**: Skill parses simulation output via `.control` + `wrdata` and presents scalar results summary
+- [x] **SIM-07**: Skill validates simulation results against design spec and suggests specific component change when spec is missed
+- [x] **SIM-08**: Skill generates a matplotlib waveform plot and saves PNG to `.librespin/09-simulation/` (optional — requires Python + matplotlib)
+- [x] **SIM-09**: User reviews and approves simulation results before marking complete (human review gate)
+- [x] **SIM-10**: Skill saves netlist and results to `.librespin/09-simulation/`
 
 ### Installer
 
@@ -140,16 +140,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CALC-06 | Phase 6 | Complete |
 | CALC-07 | Phase 6 | Complete |
 | CALC-08 | Phase 6 | Complete |
-| SIM-01 | Phase 7 | Pending |
-| SIM-02 | Phase 7 | Pending |
-| SIM-03 | Phase 7 | Pending |
-| SIM-04 | Phase 7 | Pending |
-| SIM-05 | Phase 7 | Pending |
-| SIM-06 | Phase 7 | Pending |
-| SIM-07 | Phase 7 | Pending |
-| SIM-08 | Phase 7 | Pending |
-| SIM-09 | Phase 7 | Pending |
-| SIM-10 | Phase 7 | Pending |
+| SIM-01 | Phase 7 | Complete |
+| SIM-02 | Phase 7 | Complete |
+| SIM-03 | Phase 7 | Complete |
+| SIM-04 | Phase 7 | Complete |
+| SIM-05 | Phase 7 | Complete |
+| SIM-06 | Phase 7 | Complete |
+| SIM-07 | Phase 7 | Complete |
+| SIM-08 | Phase 7 | Complete |
+| SIM-09 | Phase 7 | Complete |
+| SIM-10 | Phase 7 | Complete |
 | PKG-07 | Phase 8 | Pending |
 
 **Coverage:**

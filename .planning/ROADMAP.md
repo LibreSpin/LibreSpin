@@ -95,5 +95,5 @@
 | 4. Distribution and Docs | v0.1 | 3/3 | Complete | 2026-04-07 |
 | 5. CalcPad CE Spike | v0.2 | 2/3 | In Progress|  |
 | 6. CalcPad CE Skill | v0.2 | 2/3 | In Progress|  |
-| 7. NGSpice Simulation Skill | v0.2 | 0/? | Not started | - |
+| 7. NGSpice Simulation Skill | v0.2 | 1/2 | In Progress|  |
 | 8. Installer Update | v0.2 | 0/? | Not started | - |
