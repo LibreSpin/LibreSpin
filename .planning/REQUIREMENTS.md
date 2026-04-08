@@ -52,13 +52,13 @@ Requirements for Milestone 2 (v0.2 — CalcPad & NGSpice). Phases 5–8.
 ### CalcPad CE Skill
 
 - [x] **CALC-01**: Skill verifies CalcPad CE CLI prerequisites (Calcpad.Cli + .NET 10 runtime) and provides platform-appropriate install instructions if absent (Linux: .deb/.rpm from CE experimental; other: .NET-dependent binary)
-- [ ] **CALC-08**: Skill falls back to `Calcpad.Server` REST API (via `curl`) when CLI binary is unavailable — server callable as `POST /api/calcpad/convert`
-- [ ] **CALC-02**: Skill reads concept output from `.librespin/07-final-output/` to extract design targets
-- [ ] **CALC-03**: Skill generates a `.cpd` worksheet for the selected circuit block
-- [ ] **CALC-04**: Skill runs `Calcpad.Cli input.cpd output.html -s` headless and extracts calculated values
-- [ ] **CALC-05**: Skill validates calculated values against design targets and presents pass/fail summary
-- [ ] **CALC-06**: User reviews and approves calculations before proceeding (human review gate)
-- [ ] **CALC-07**: Skill saves `.cpd` worksheet and results to `.librespin/08-calculations/`
+- [x] **CALC-08**: Skill falls back to `Calcpad.Server` REST API (via `curl`) when CLI binary is unavailable — server callable as `POST /api/calcpad/convert`
+- [x] **CALC-02**: Skill reads concept output from `.librespin/07-final-output/` to extract design targets
+- [x] **CALC-03**: Skill generates a `.cpd` worksheet for the selected circuit block
+- [x] **CALC-04**: Skill runs `Calcpad.Cli input.cpd output.html -s` headless and extracts calculated values
+- [x] **CALC-05**: Skill validates calculated values against design targets and presents pass/fail summary
+- [x] **CALC-06**: User reviews and approves calculations before proceeding (human review gate)
+- [x] **CALC-07**: Skill saves `.cpd` worksheet and results to `.librespin/08-calculations/`
 
 ### NGSpice Simulation Skill
 
@@ -133,13 +133,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CW-09 | Phase 3 | Complete |
 | CW-10 | Phase 3 | Complete |
 | CALC-01 | Phase 6 | Complete |
-| CALC-02 | Phase 6 | Pending |
-| CALC-03 | Phase 6 | Pending |
-| CALC-04 | Phase 6 | Pending |
-| CALC-05 | Phase 6 | Pending |
-| CALC-06 | Phase 6 | Pending |
-| CALC-07 | Phase 6 | Pending |
-| CALC-08 | Phase 6 | Pending |
+| CALC-02 | Phase 6 | Complete |
+| CALC-03 | Phase 6 | Complete |
+| CALC-04 | Phase 6 | Complete |
+| CALC-05 | Phase 6 | Complete |
+| CALC-06 | Phase 6 | Complete |
+| CALC-07 | Phase 6 | Complete |
+| CALC-08 | Phase 6 | Complete |
 | SIM-01 | Phase 7 | Pending |
 | SIM-02 | Phase 7 | Pending |
 | SIM-03 | Phase 7 | Pending |

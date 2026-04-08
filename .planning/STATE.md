@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
-status: executing
-stopped_at: Completed 06-01-PLAN.md — fork setup and GitHub Release v0.1.0-librespin verified
-last_updated: "2026-04-08T17:19:31.197Z"
+status: verifying
+stopped_at: "Completed 06-02-PLAN.md — /librespin:calcpad skill files written and CLI verified"
+last_updated: "2026-04-08T17:30:42.852Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 Phase: 06 (calcpad-ce-skill) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-08
 
 Progress: [----------] 0% (0/4 phases)
@@ -78,6 +78,8 @@ v0.2 roadmap decisions:
 - [Phase 06]: PR artifacts are documentation-only — user submits manually to imartincei/CalcpadCE when ready
 - [Phase 06-calcpad-ce-skill]: fork_owner: LibreSpin — fork lives at LibreSpin/CalcpadCE, matching D-01 exactly
 - [Phase 06-calcpad-ce-skill]: GitHub Actions workflow requires permissions: contents: write for softprops/action-gh-release to create releases
+- [Phase 06-calcpad-ce-skill]: doc/template.html required alongside Cli binary — not embedded in PublishSingleFile; install instructions updated
+- [Phase 06-calcpad-ce-skill]: Output contract frozen: .librespin/08-calculations/{slug}.cpd/.html/-summary.md for Phase 7 NGSpice consumption
 
 ### Roadmap Evolution
 
@@ -93,6 +95,6 @@ None. Phase 5 spike resolved: CalcPad CE CLI and REST API both working on Linux 
 
 ## Session Continuity
 
-Last session: 2026-04-08T17:19:31.193Z
-Stopped at: Completed 06-01-PLAN.md — fork setup and GitHub Release v0.1.0-librespin verified
+Last session: 2026-04-08T17:30:42.848Z
+Stopped at: Completed 06-02-PLAN.md — /librespin:calcpad skill files written and CLI verified
 Resume file: None

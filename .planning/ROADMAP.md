@@ -58,7 +58,7 @@
   5. User can review calculations and approve before proceeding; worksheet and results are saved to `.librespin/08-calculations/`
 **Plans**: 3 plans
 - [x] 06-01-PLAN.md — Create LibreSpin/CalcpadCE fork, CI workflow, and first GitHub Release of Cli binary
-- [ ] 06-02-PLAN.md — Write skills/calcpad/SKILL.md + agents/calcpad.md and validate end-to-end against a fixture
+- [x] 06-02-PLAN.md — Write skills/calcpad/SKILL.md + agents/calcpad.md and validate end-to-end against a fixture
 - [x] 06-03-PLAN.md — Produce upstream PR artifacts (AuthSettings fix, Linux build docs) for imartincei/CalcpadCE
 **UI hint**: no
 
