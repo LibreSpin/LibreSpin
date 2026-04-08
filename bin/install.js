@@ -46,7 +46,7 @@ async function install() {
   try {
     // Create target directories before copying
     const dirs = [
-      'skills/librespin-concept',
+      'skills/concept',
       'agents',
       'librespin/templates',
     ];
@@ -56,16 +56,16 @@ async function install() {
 
     // Copy skill directory (recursive)
     await cp(
-      join(sourceBase, 'skills', 'librespin-concept'),
-      join(targetBase, 'skills', 'librespin-concept'),
+      join(sourceBase, 'skills', 'concept'),
+      join(targetBase, 'skills', 'concept'),
       { recursive: true, force: true }
     );
     console.log('  ✓ Skill installed');
 
     // Copy agent flat file (not a directory)
     await cp(
-      join(sourceBase, 'agents', 'librespin-concept.md'),
-      join(targetBase, 'agents', 'librespin-concept.md'),
+      join(sourceBase, 'agents', 'concept.md'),
+      join(targetBase, 'agents', 'concept.md'),
       { force: true }
     );
     console.log('  ✓ Agent installed');
@@ -90,8 +90,8 @@ async function install() {
 }
 
 const INSTALL_ITEMS = [
-  { path: join('skills', 'librespin-concept'), recursive: true },
-  { path: join('agents', 'librespin-concept.md'), recursive: false },
+  { path: join('skills', 'concept'), recursive: true },
+  { path: join('agents', 'concept.md'), recursive: false },
   { path: join('librespin', 'templates'), recursive: true },
 ];
 

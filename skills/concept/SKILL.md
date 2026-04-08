@@ -75,7 +75,7 @@ cat .librespin/state.md 2>/dev/null
 
 ### Step 4: Spawn librespin-concept Agent
 
-Use Agent tool with subagent_type="librespin-concept", run_in_background=false (REQUIRED — phases use AskUserQuestion and cannot run backgrounded):
+Use Agent tool with subagent_type="librespin:concept", run_in_background=false (REQUIRED — phases use AskUserQuestion and cannot run backgrounded):
 
 ```
 Execute librespin-concept workflow.
