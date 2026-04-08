@@ -69,7 +69,21 @@ Apply the decision matrix:
 **Verdict:** GO
 **Reason:** Both CLI (exit 0, 29KB HTML, correct calculation) and REST API (HTTP 200, 24KB HTML) are working — Phase 6 has full choice of integration path.
 
-## 6. Recommended Phase 6 Implementation Strategy
+## 6. Phase 6 Upstream Contribution Deliverables
+
+These are **required Phase 6 deliverables**, not optional:
+
+1. **PR: Fix CalcpadService.cs AuthSettings regression** — Submit to `imartincei/CalcpadCE`. Remove lines 54-62 (the `if (settings?.Auth != null)` block referencing the removed `macroParser.AuthSettings` API). Fixes a build-breaking CS1061/CS0234 compile error for anyone building from source. This is the patch applied during the spike.
+
+2. **PR: Document Linux build path** — Update CalcpadCE README/docs with:
+   - CLI binary outputs as `Cli` not `Calcpad.Cli` on Linux (assembly naming)
+   - Server port is non-deterministic — use `--urls` flag or parse `Now listening on:` from startup log; do not hardcode 8080
+   - `dotnet-install.sh` as the sudo-free install path for .NET 10 SDK
+   - Server `<TargetFramework>` is `net10.0`, not `net8.0` as the current README states
+
+See `.planning/seeds/SEED-001-calcpadce-linux-packaging.md` for longer-term packaging work (build-linux.sh, .deb, systemd unit) — deferred until Phase 6 ships and PRs are accepted.
+
+## 6b. Recommended Phase 6 Implementation Strategy
 
 - **CALC-01 (prereq check):** Check that the `Cli` binary exists at the configured path (e.g., `~/.librespin/bin/Cli`). If absent, prompt user to run the build sequence: install .NET 10 SDK via `dotnet-install.sh` (or `sudo apt install dotnet-sdk-10.0` if sudo is available), clone `github.com/imartincei/CalcpadCE`, run `dotnet publish Calcpad.Cli/Calcpad.Cli.csproj -r linux-x64 --self-contained true -p:PublishSingleFile=true -c Release -o ~/.librespin/bin/`. The binary is self-contained — no dotnet required at runtime after install.
 
