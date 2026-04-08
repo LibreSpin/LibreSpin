@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
 status: verifying
-stopped_at: Completed 07-02-PLAN.md — E2E fixture + ngspice validation complete, Phase 7 done
-last_updated: "2026-04-08T20:46:47.243Z"
+stopped_at: Completed 08-01-PLAN.md — installer updated for calcpad and simulate skills
+last_updated: "2026-04-08T21:17:20.953Z"
 last_activity: 2026-04-08
 progress:
-  total_phases: 4
-  completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
+  total_phases: 5
+  completed_phases: 4
+  total_plans: 9
+  completed_plans: 9
   percent: 0
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-08)
 
 **Core value:** A minimal, lightweight harness that makes Claude Code an expert hardware design assistant — the intelligence lives in the prompts, not in code.
-**Current focus:** Phase 07 — ngspice-simulation-skill
+**Current focus:** Phase 08 — installer-update
 
 ## Current Position
 
-Phase: 8
-Plan: Not started
+Phase: 08 (installer-update) — EXECUTING
+Plan: 1 of 1
 Status: Phase complete — ready for verification
 Last activity: 2026-04-08
 
@@ -84,6 +84,7 @@ v0.2 roadmap decisions:
 - [Phase 07]: wrdata ASCII output chosen over binary .raw — plain text parseable by awk/grep
 - [Phase 07-ngspice-simulation-skill]: agents/simulate.md requires no changes: all documented error substrings and wrdata parse logic confirmed accurate against NGSpice 42 on Ubuntu noble
 - [Phase 07-ngspice-simulation-skill]: Floating-node circuit does NOT trigger singular matrix in NGSpice 42; only true topological singularity (parallel voltage sources) triggers ERR-2
+- [Phase 08]: Templates source path corrected from skills/librespin-concept/templates to skills/concept/templates
 
 ### Roadmap Evolution
 
@@ -99,6 +100,6 @@ None. Phase 5 spike resolved: CalcPad CE CLI and REST API both working on Linux 
 
 ## Session Continuity
 
-Last session: 2026-04-08T20:43:57.692Z
-Stopped at: Completed 07-02-PLAN.md — E2E fixture + ngspice validation complete, Phase 7 done
+Last session: 2026-04-08T21:17:20.949Z
+Stopped at: Completed 08-01-PLAN.md — installer updated for calcpad and simulate skills
 Resume file: None

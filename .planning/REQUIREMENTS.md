@@ -75,7 +75,7 @@ Requirements for Milestone 2 (v0.2 — CalcPad & NGSpice). Phases 5–8.
 
 ### Installer
 
-- [ ] **PKG-07**: `bin/install.js` copies calcpad and simulate skill files alongside the concept skill
+- [x] **PKG-07**: `bin/install.js` copies calcpad and simulate skill files alongside the concept skill
 
 ## Future Requirements
 
@@ -150,7 +150,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SIM-08 | Phase 7 | Complete |
 | SIM-09 | Phase 7 | Complete |
 | SIM-10 | Phase 7 | Complete |
-| PKG-07 | Phase 8 | Pending |
+| PKG-07 | Phase 8 | Complete |
 
 **Coverage:**
 - v1 requirements: 26 total (Phases 1–4, all complete)
