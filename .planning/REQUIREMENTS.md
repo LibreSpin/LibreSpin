@@ -132,12 +132,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CW-08 | Phase 3 | Complete |
 | CW-09 | Phase 3 | Complete |
 | CW-10 | Phase 3 | Complete |
+| CALC-01 | Phase 6 | Pending |
+| CALC-02 | Phase 6 | Pending |
+| CALC-03 | Phase 6 | Pending |
+| CALC-04 | Phase 6 | Pending |
+| CALC-05 | Phase 6 | Pending |
+| CALC-06 | Phase 6 | Pending |
+| CALC-07 | Phase 6 | Pending |
+| CALC-08 | Phase 6 | Pending |
+| SIM-01 | Phase 7 | Pending |
+| SIM-02 | Phase 7 | Pending |
+| SIM-03 | Phase 7 | Pending |
+| SIM-04 | Phase 7 | Pending |
+| SIM-05 | Phase 7 | Pending |
+| SIM-06 | Phase 7 | Pending |
+| SIM-07 | Phase 7 | Pending |
+| SIM-08 | Phase 7 | Pending |
+| SIM-09 | Phase 7 | Pending |
+| SIM-10 | Phase 7 | Pending |
+| PKG-07 | Phase 8 | Pending |
 
 **Coverage:**
-- v1 requirements: 26 total
-- Mapped to phases: 26
+- v1 requirements: 26 total (Phases 1–4, all complete)
+- v0.2 requirements: 19 total (Phases 5–8)
+- Mapped to phases: 45
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-04*
-*Last updated: 2026-04-08 — v0.2 requirements added*
+*Last updated: 2026-04-08 — v0.2 traceability added*

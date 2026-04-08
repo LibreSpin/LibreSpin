@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
 status: planning
-stopped_at: Milestone v0.2 started — defining requirements
+stopped_at: Roadmap created — 4 phases defined (5–8), ready for plan-phase
 last_updated: "2026-04-08T00:00:00.000Z"
 last_activity: 2026-04-08
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -25,10 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 5 (CalcPad CE Spike) — not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-08 — Milestone v0.2 started
+Status: Roadmap created — ready to plan Phase 5
+Last activity: 2026-04-08 — v0.2 roadmap created (4 phases, 19 requirements mapped)
+
+Progress: [----------] 0% (0/4 phases)
 
 ## Performance Metrics
 
@@ -56,9 +58,16 @@ Carried forward from v0.1:
 - CalcPad CE CLI wrapping — token-efficient skill, .NET 10 runtime acceptable as prereq
 - SKILL.md split (OPT-01) deferred — context pressure not observed through v0.1 Phase 7
 
+v0.2 roadmap decisions:
+
+- Phase 5 is a spike (no requirements assigned) — it de-risks Phase 6 by confirming CalcPad CE CLI works headless on Linux before any skill content is written
+- CALC-01 (prereq check) and CALC-08 (REST API fallback) both live in Phase 6 — spike findings determine which path the skill implements
+- SIM-08 (matplotlib plot) is explicitly optional within Phase 7 — requires Python + matplotlib, which is not guaranteed in all environments
+- Phase 8 (installer) is deferred until Phases 6 and 7 are stable — copy paths must be final before install.js is updated
+
 ### Roadmap Evolution
 
-*(none yet — v0.2 roadmap not yet created)*
+2026-04-08 — v0.2 roadmap created. 4 phases (5–8), 19 requirements mapped (CALC-01 through CALC-08, SIM-01 through SIM-10, PKG-07). Phase 5 spike precedes Phase 6 calcpad skill; Phase 7 simulate reads calcpad output; Phase 8 installer follows both skills.
 
 ### Pending Todos
 
@@ -66,10 +75,10 @@ None.
 
 ### Blockers/Concerns
 
-None yet.
+CRITICAL (Phase 5 spike): CalcPad CE Linux binary availability unconfirmed — no pre-built binary confirmed in research. Spike must resolve before Phase 6 begins.
 
 ## Session Continuity
 
 Last session: 2026-04-08
-Stopped at: Milestone v0.2 started — defining requirements
+Stopped at: Roadmap created — run `/gsd:plan-phase 5` to begin
 Resume file: None
