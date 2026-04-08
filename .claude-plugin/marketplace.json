@@ -6,7 +6,10 @@
   "plugins": [
     {
       "name": "librespin",
-      "source": ".",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/LibreSpin/LibreSpin.git"
+      },
       "description": "AI-driven hardware concept design workflow for Claude Code"
     }
   ]
