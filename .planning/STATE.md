@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
-status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-04-08T15:14:35.502Z"
+status: verifying
+stopped_at: "Completed 05-03-PLAN.md (checkpoint:human-verify pending user approval)"
+last_updated: "2026-04-08T15:18:58.955Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 Phase: 05 (calcpad-ce-spike) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-08
 
 Progress: [----------] 0% (0/4 phases)
@@ -70,6 +70,9 @@ v0.2 roadmap decisions:
 - [Phase 05]: Server port is not always 8080 — read from startup log at runtime; Phase 6 skill must parse 'Now listening on:' line
 - [Phase 05]: CLI success detection: exit code + output file existence, not stdout parsing (silent with -s flag)
 - [Phase 05]: Both CLI and REST paths confirmed working — Phase 6 go/no-go: GO on both integration strategies
+- [Phase 05-calcpad-ce-spike]: Phase 5 verdict GO: both CalcpadCE CLI and REST API working on Linux; CLI-first recommended for Phase 6
+- [Phase 05-calcpad-ce-spike]: Phase 6 binary name: Cli (not Calcpad.Cli) — must use correct Linux assembly name
+- [Phase 05-calcpad-ce-spike]: Phase 6 server port: read dynamically from startup log or use --urls flag (port 9420 observed, not 8080)
 
 ### Roadmap Evolution
 
@@ -85,6 +88,6 @@ CRITICAL (Phase 5 spike): CalcPad CE Linux binary availability unconfirmed — n
 
 ## Session Continuity
 
-Last session: 2026-04-08T15:14:35.498Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-04-08T15:18:58.952Z
+Stopped at: Completed 05-03-PLAN.md (checkpoint:human-verify pending user approval)
 Resume file: None
