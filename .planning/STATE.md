@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
-status: planning
-stopped_at: Roadmap created — 4 phases defined (5–8), ready for plan-phase
-last_updated: "2026-04-08T00:00:00.000Z"
-last_activity: 2026-04-08
+status: executing
+stopped_at: "Roadmap created — run `/gsd:plan-phase 5` to begin"
+last_updated: "2026-04-08T15:00:55.282Z"
+last_activity: 2026-04-08 -- Phase 05 execution started
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
   percent: 0
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-08)
 
 **Core value:** A minimal, lightweight harness that makes Claude Code an expert hardware design assistant — the intelligence lives in the prompts, not in code.
-**Current focus:** Milestone v0.2 — CalcPad & NGSpice
+**Current focus:** Phase 05 — calcpad-ce-spike
 
 ## Current Position
 
-Phase: Phase 5 (CalcPad CE Spike) — not started
-Plan: —
-Status: Roadmap created — ready to plan Phase 5
-Last activity: 2026-04-08 — v0.2 roadmap created (4 phases, 19 requirements mapped)
+Phase: 05 (calcpad-ce-spike) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 05
+Last activity: 2026-04-08 -- Phase 05 Plan 01 Task 1: .NET 10 SDK installed via dotnet-install.sh to /tmp/dotnet10
 
 Progress: [----------] 0% (0/4 phases)
 
