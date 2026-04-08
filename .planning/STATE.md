@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 Phase: 05 (calcpad-ce-spike) — EXECUTING
 Plan: 1 of 3
 Status: Executing Phase 05
-Last activity: 2026-04-08 -- Phase 05 Plan 01 Task 1: .NET 10 SDK installed via dotnet-install.sh to /tmp/dotnet10
+Last activity: 2026-04-08 -- Phase 05 Plan 01 Task 2: CalcpadCE cloned, Calcpad.Cli built as /tmp/calcpad-cli-out/Cli (79MB ELF)
 
 Progress: [----------] 0% (0/4 phases)
 
