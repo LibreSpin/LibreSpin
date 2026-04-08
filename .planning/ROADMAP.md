@@ -56,7 +56,10 @@
   3. Skill reads design targets from `.librespin/07-final-output/` and generates a `.cpd` worksheet for the selected circuit block
   4. Skill runs the CLI (or REST API) headless and presents a pass/fail validation summary against design targets (e.g. "Vout = 3.29 V, target 3.3 V ±2%, PASS")
   5. User can review calculations and approve before proceeding; worksheet and results are saved to `.librespin/08-calculations/`
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 06-01-PLAN.md — Create LibreSpin/CalcpadCE fork, CI workflow, and first GitHub Release of Cli binary
+- [ ] 06-02-PLAN.md — Write skills/calcpad/SKILL.md + agents/calcpad.md and validate end-to-end against a fixture
+- [ ] 06-03-PLAN.md — Produce upstream PR artifacts (AuthSettings fix, Linux build docs) for imartincei/CalcpadCE
 **UI hint**: no
 
 ### Phase 7: NGSpice Simulation Skill
@@ -91,6 +94,6 @@
 | 3. End-to-End Validation | v0.1 | 4/4 | Complete | 2026-04-06 |
 | 4. Distribution and Docs | v0.1 | 3/3 | Complete | 2026-04-07 |
 | 5. CalcPad CE Spike | v0.2 | 2/3 | In Progress|  |
-| 6. CalcPad CE Skill | v0.2 | 0/? | Not started | - |
+| 6. CalcPad CE Skill | v0.2 | 0/3 | Not started | - |
 | 7. NGSpice Simulation Skill | v0.2 | 0/? | Not started | - |
 | 8. Installer Update | v0.2 | 0/? | Not started | - |
