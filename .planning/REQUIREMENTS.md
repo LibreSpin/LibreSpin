@@ -45,26 +45,46 @@ Requirements for initial release (Milestone 1). Each maps to roadmap phases.
 - [x] **CW-09**: Workflow state persists across invocations — user can resume interrupted runs
 - [x] **CW-10**: Completeness scoring works (critical/important/nice-to-have weighted at 50/30/20)
 
-## v2 Requirements
+## v0.2 Requirements
 
-Deferred to Milestone 2. Tracked but not in current roadmap.
-
-### Context Optimization
-
-- **OPT-01**: AGENT.md split into agent + reference files to reduce context pressure
-- **OPT-02**: Streamline bloated sections identified through v1 usage
+Requirements for Milestone 2 (v0.2 — CalcPad & NGSpice). Phases 5–8.
 
 ### CalcPad CE Skill
 
-- **CALC-01**: User can run circuit calculations via /librespin:calcpad command
-- **CALC-02**: Skill wraps CalcPad CE CLI with token-efficient prompts
-- **CALC-03**: AI iterates calculations 3-5 times for accuracy verification
+- [ ] **CALC-01**: Skill verifies CalcPad CE CLI prerequisites (Calcpad.Cli + .NET 10 runtime) and provides platform-appropriate install instructions if absent (Linux: .deb/.rpm from CE experimental; other: .NET-dependent binary)
+- [ ] **CALC-08**: Skill falls back to `Calcpad.Server` REST API (via `curl`) when CLI binary is unavailable — server callable as `POST /api/calcpad/convert`
+- [ ] **CALC-02**: Skill reads concept output from `.librespin/07-final-output/` to extract design targets
+- [ ] **CALC-03**: Skill generates a `.cpd` worksheet for the selected circuit block
+- [ ] **CALC-04**: Skill runs `Calcpad.Cli input.cpd output.html -s` headless and extracts calculated values
+- [ ] **CALC-05**: Skill validates calculated values against design targets and presents pass/fail summary
+- [ ] **CALC-06**: User reviews and approves calculations before proceeding (human review gate)
+- [ ] **CALC-07**: Skill saves `.cpd` worksheet and results to `.librespin/08-calculations/`
 
-### NGSpice Skill
+### NGSpice Simulation Skill
 
-- **SIM-01**: User can run SPICE simulations via /librespin:simulate command
-- **SIM-02**: Skill generates NGSpice netlists from concept agent outputs
-- **SIM-03**: AI interprets simulation results and suggests corrections
+- [ ] **SIM-01**: Skill verifies NGSpice prerequisite (ngspice in PATH) and provides install instructions if absent
+- [ ] **SIM-02**: Skill reads component values from `.librespin/08-calculations/` and generates a syntactically valid `.cir` SPICE netlist
+- [ ] **SIM-03**: Skill selects appropriate analysis type (`.op` / `.tran` / `.ac` / `.dc`) based on circuit type or user selection
+- [ ] **SIM-04**: Skill runs `ngspice -b circuit.cir` in batch mode and detects errors by scanning stdout/stderr (not exit code)
+- [ ] **SIM-05**: Skill diagnoses convergence failures with specific remediation suggestions (Timestep too small, singular matrix, etc.)
+- [ ] **SIM-06**: Skill parses simulation output via `.control` + `wrdata` and presents scalar results summary
+- [ ] **SIM-07**: Skill validates simulation results against design spec and suggests specific component change when spec is missed
+- [ ] **SIM-08**: Skill generates a matplotlib waveform plot and saves PNG to `.librespin/09-simulation/` (optional — requires Python + matplotlib)
+- [ ] **SIM-09**: User reviews and approves simulation results before marking complete (human review gate)
+- [ ] **SIM-10**: Skill saves netlist and results to `.librespin/09-simulation/`
+
+### Installer
+
+- [ ] **PKG-07**: `bin/install.js` copies calcpad and simulate skill files alongside the concept skill
+
+## Future Requirements
+
+Deferred to future milestones. Tracked but not in current roadmap.
+
+### Context Optimization (v0.2 backlog — consider for v0.2 if SKILL.md pressure observed)
+
+- **OPT-01**: SKILL.md split into per-phase files to reduce 239 KB context pressure (backlog 999.2)
+- **OPT-02**: Auto-chain phases to eliminate re-invoke between phases (backlog 999.1)
 
 ## Out of Scope
 
@@ -120,4 +140,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-04*
-*Last updated: 2026-04-04 after roadmap creation*
+*Last updated: 2026-04-08 — v0.2 requirements added*
