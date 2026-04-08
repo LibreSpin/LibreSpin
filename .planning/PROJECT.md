@@ -123,4 +123,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-08 — Phase 5 (CalcPad CE spike) complete. GO verdict. Phase 6 planning unblocked.*
+*Last updated: 2026-04-08 — Phase 6 (CalcPad CE skill) complete. `/librespin:calcpad` skill delivered. LibreSpin/CalcpadCE fork live at v0.1.0-librespin. Phase 7 (NGSpice simulation skill) unblocked.*
