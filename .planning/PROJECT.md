@@ -12,7 +12,7 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 
 ### Validated
 
-- ✓ npx installer distributes skill pack to ~/.claude/ — v0.1
+- ✓ npx installer distributes all three skills (concept, calcpad, simulate) to ~/.claude/ — v0.2 — Validated in Phase 8: install+uninstall round-trip passes for all six new paths (3 skill dirs + 3 agent files)
 - ✓ Hardware concept agent ported from hw-concept and packaged as LibreSpin skill — v0.1
 - ✓ Concept agent works end-to-end: requirements interview through concept recommendation — v0.1 (IoT sensor node: 5 concepts, 4 validated, STM32L053+LoRaWAN recommended at 92/100)
 - ✓ LibreSpin outputs stored in .librespin/ (separate from GSD .planning/) — v0.1
@@ -123,4 +123,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-08 — Phase 7 (NGSpice simulation skill) complete. `/librespin:simulate` skill delivered (`skills/simulate/SKILL.md` + `agents/simulate.md`). SIM-01..SIM-10 all validated. Phase 8 (installer update) is next.*
+*Last updated: 2026-04-08 — Phase 8 (installer update) complete. npx installer now distributes all three skills (concept, calcpad, simulate). v0.2 milestone (CalcPad & NGSpice) is the last planned phase — all phases complete.*
