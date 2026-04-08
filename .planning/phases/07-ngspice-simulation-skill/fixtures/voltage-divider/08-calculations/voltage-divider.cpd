@@ -1,0 +1,5 @@
+"Voltage divider calculation
+V_in = 12
+R1 = 10000
+R2 = 3300
+V_out = V_in * R2 / (R1 + R2)
