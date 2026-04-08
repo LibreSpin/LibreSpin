@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
 status: executing
-stopped_at: Completed 06-03-PLAN.md — upstream PR artifacts created
-last_updated: "2026-04-08T17:07:33.884Z"
+stopped_at: Completed 06-01-PLAN.md — fork setup and GitHub Release v0.1.0-librespin verified
+last_updated: "2026-04-08T17:19:31.197Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 ## Current Position
 
 Phase: 06 (calcpad-ce-skill) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-08
 
@@ -76,6 +76,8 @@ v0.2 roadmap decisions:
 - [Phase 05-calcpad-ce-spike]: Phase 6 required upstream PR #1: fix CalcpadService.cs AuthSettings regression in imartincei/CalcpadCE
 - [Phase 05-calcpad-ce-spike]: Phase 6 required upstream PR #2: document Linux build path deviations in CalcpadCE README
 - [Phase 06]: PR artifacts are documentation-only — user submits manually to imartincei/CalcpadCE when ready
+- [Phase 06-calcpad-ce-skill]: fork_owner: LibreSpin — fork lives at LibreSpin/CalcpadCE, matching D-01 exactly
+- [Phase 06-calcpad-ce-skill]: GitHub Actions workflow requires permissions: contents: write for softprops/action-gh-release to create releases
 
 ### Roadmap Evolution
 
@@ -91,6 +93,6 @@ None. Phase 5 spike resolved: CalcPad CE CLI and REST API both working on Linux 
 
 ## Session Continuity
 
-Last session: 2026-04-08T17:07:29.100Z
-Stopped at: Completed 06-03-PLAN.md — upstream PR artifacts created
+Last session: 2026-04-08T17:19:31.193Z
+Stopped at: Completed 06-01-PLAN.md — fork setup and GitHub Release v0.1.0-librespin verified
 Resume file: None
