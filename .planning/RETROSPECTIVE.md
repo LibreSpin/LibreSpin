@@ -2,7 +2,7 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
-## Milestone: v1.0 — MVP
+## Milestone: v0.1 — MVP
 
 **Shipped:** 2026-04-07
 **Phases:** 4 | **Plans:** 10 | **Sessions:** ~4
@@ -47,7 +47,7 @@
 
 | Milestone | Sessions | Phases | Key Change |
 |-----------|----------|--------|------------|
-| v1.0 | ~4 | 4 | Baseline — first GSD milestone for this project |
+| v0.1 | ~4 | 4 | Baseline — first GSD milestone for this project |
 
 ### Top Lessons (Verified Across Milestones)
 

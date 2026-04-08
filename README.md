@@ -6,13 +6,13 @@ AI-driven hardware concept design for Claude Code. Describe your circuit in plai
 
 | Feature | Status |
 |---------|--------|
-| `/librespin:concept` — 9-phase concept workflow | ✅ v1.0 |
-| Plugin marketplace install | ✅ v1.0 |
-| Circuit calculations (CalcPad CE) | 📋 v2.0 |
-| SPICE simulation (NGSpice) | 📋 v2.0 |
-| ERC / DRC / DFM checks | 📋 v3.0 |
-| Production file export (KiCad CLI) | 📋 v4.0 |
-| Schematic + PCB layout | 📋 v5–6.0 |
+| `/librespin:concept` — 9-phase concept workflow | ✅ v0.1 |
+| Plugin marketplace install | ✅ v0.1 |
+| Circuit calculations (CalcPad CE) | 📋 v0.2 |
+| SPICE simulation (NGSpice) | 📋 v0.2 |
+| ERC / DRC / DFM checks | 📋 v0.3 |
+| Production file export (KiCad CLI) | 📋 v0.4 |
+| Schematic + PCB layout | 📋 v0.5–0.6 |
 
 ## Install
 

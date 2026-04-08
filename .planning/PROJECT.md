@@ -12,18 +12,18 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 
 ### Validated
 
-- ✓ npx installer distributes skill pack to ~/.claude/ — v1.0
-- ✓ Hardware concept agent ported from hw-concept and packaged as LibreSpin skill — v1.0
-- ✓ Concept agent works end-to-end: requirements interview through concept recommendation — v1.0 (IoT sensor node: 5 concepts, 4 validated, STM32L053+LoRaWAN recommended at 92/100)
-- ✓ LibreSpin outputs stored in .librespin/ (separate from GSD .planning/) — v1.0
-- ✓ Existing hw-concept 9-phase workflow preserved — v1.0
-- ✓ Plugin marketplace distribution (`/plugin marketplace add LibreSpin/LibreSpin`) — v1.0
-- ✓ Clean uninstall via `npx librespin-install --uninstall` — v1.0
+- ✓ npx installer distributes skill pack to ~/.claude/ — v0.1
+- ✓ Hardware concept agent ported from hw-concept and packaged as LibreSpin skill — v0.1
+- ✓ Concept agent works end-to-end: requirements interview through concept recommendation — v0.1 (IoT sensor node: 5 concepts, 4 validated, STM32L053+LoRaWAN recommended at 92/100)
+- ✓ LibreSpin outputs stored in .librespin/ (separate from GSD .planning/) — v0.1
+- ✓ Existing hw-concept 9-phase workflow preserved — v0.1
+- ✓ Plugin marketplace distribution (`/plugin marketplace add LibreSpin/LibreSpin`) — v0.1
+- ✓ Clean uninstall via `npx librespin-install --uninstall` — v0.1
 
 ### Active
 
-- [ ] CalcPad CE CLI skill (`/librespin:calcpad`) — v2
-- [ ] NGSpice simulation skill (`/librespin:simulate`) — v2
+- [ ] CalcPad CE CLI skill (`/librespin:calcpad`) — v0.2
+- [ ] NGSpice simulation skill (`/librespin:simulate`) — v0.2
 - [ ] SKILL.md split into per-phase files to reduce 239KB context pressure — v2 (backlog 999.2)
 - [ ] Auto-chain phases (eliminate re-invoke between phases) — v2 (backlog 999.1)
 
@@ -35,13 +35,13 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 - Autonomous BOM without human gate — hallucination risk (wrong topology, fabricated components)
 - Fully autonomous end-to-end pipeline — accuracy compounds across phases; human checkpoints are the right architecture
 - KiCad integration (schematic/PCB) — v5–v6 milestones
-- ERC/DRC/DFM automated checks — v3 milestone
-- Production file export (KiCad CLI) — v4 milestone
+- ERC/DRC/DFM automated checks — v0.3 milestone
+- Production file export (KiCad CLI) — v0.4 milestone
 - npm registry publish — plugin marketplace is the primary v1 distribution; npm is secondary and deferred
 
 ## Context
 
-**Shipped v1.0:** Pure Claude Code skill pack — `skills/concept/SKILL.md` (239KB, ~58k tokens), `agents/concept.md`, 3 YAML templates. Installed via plugin marketplace (primary) or npx (secondary). Plugin command: `/librespin:concept`.
+**Shipped v0.1:** Pure Claude Code skill pack — `skills/concept/SKILL.md` (239KB, ~58k tokens), `agents/concept.md`, 3 YAML templates. Installed via plugin marketplace (primary) or npx (secondary). Plugin command: `/librespin:concept`.
 
 **Architecture:** No Python, no build step, no runtime dependencies. Intelligence lives in the 239KB SKILL.md prompt. Worker agent (`librespin:concept`) handles multi-phase state via `.librespin/state.md` in each project.
 
@@ -54,8 +54,8 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 
 **Target pipeline (full vision across all milestones):**
 1. Natural language requirements interview → concept recommendation (v1 ✓)
-2. AI-assisted circuit calculations via CalcPad CE CLI (v2)
-3. SPICE simulation via NGSpice CLI (v2)
+2. AI-assisted circuit calculations via CalcPad CE CLI (v0.2)
+3. SPICE simulation via NGSpice CLI (v0.2)
 4. ERC / DRC / DFM checks (v3)
 5. Production file export via KiCad CLI (v4)
 6. Schematic layout (v5)
@@ -77,25 +77,25 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 |----------|-----------|---------|
 | Pure Claude Code skill pack | Maximizes minimalism. Intelligence in prompts, not code. GSD proves pattern scales. | ✓ Validated — shipped as 239KB SKILL.md |
 | Fork hw-concept, don't rewrite | It works. Port with minimal changes, refine later. Can't optimize what you haven't measured. | ✓ Validated — port took 2 phases, workflow works |
-| One GSD milestone per version | Each version has distinct scope. Prevents speculative planning. | ✓ Validated — clean v1.0 boundary |
+| One GSD milestone per version | Each version has distinct scope. Prevents speculative planning. | ✓ Validated — clean v0.1 boundary |
 | .librespin/ for outputs | Avoids conflict with GSD .planning/. Clean separation of concerns. | ✓ Validated — no conflicts observed |
 | npx installer | Proven pattern (hw-concept uses it). Familiar to Node.js ecosystem. | ✓ Validated — install/uninstall round-trip works |
 | Plugin marketplace as primary distribution | Integrated into Claude Code UI — no terminal required. `source: "."` was invalid; needed `{"source":"url","url":"..."}` | ✓ Validated — marketplace add + plugin install works |
 | skills/concept/ not skills/librespin-concept/ | Avoids plugin namespace collision (`librespin/` dir caused recursive cache install) | ✓ Validated — `/librespin:concept` works cleanly |
-| CalcPad CE CLI wrapping | Token-efficient skill. .NET 10 runtime acceptable as prerequisite. | — Pending (v2) |
+| CalcPad CE CLI wrapping | Token-efficient skill. .NET 10 runtime acceptable as prerequisite. | — Pending (v0.2) |
 
 ## Milestone Overview
 
 | Milestone | Version | Scope | Status |
 |-----------|---------|-------|--------|
-| 1 | v1.0 | Concept agent port + skill pack packaging + distribution | ✅ Shipped 2026-04-07 |
-| 2 | v2.0 | CalcPad CE CLI skill + NGSpice simulation + SKILL.md optimization | 📋 Planned |
-| 3 | v3.0 | Automated ERC/DRC/DFM checks | 📋 Planned |
-| 4 | v4.0 | Production file export via KiCad CLI | 📋 Planned |
-| 5 | v5.0 | Schematic layout | 📋 Planned |
-| 6 | v6.0 | PCB layout + human review report | 📋 Planned |
+| 1 | v0.1 | Concept agent port + skill pack packaging + distribution | ✅ Shipped 2026-04-07 |
+| 2 | v0.2 | CalcPad CE CLI skill + NGSpice simulation + SKILL.md optimization | 📋 Planned |
+| 3 | v0.3 | Automated ERC/DRC/DFM checks | 📋 Planned |
+| 4 | v0.4 | Production file export via KiCad CLI | 📋 Planned |
+| 5 | v0.5 | Schematic layout | 📋 Planned |
+| 6 | v0.6 | PCB layout + human review report | 📋 Planned |
 
-**Current milestone:** 2 (v2.0)
+**Current milestone:** 2 (v0.2)
 
 ## Evolution
 
@@ -114,4 +114,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-08 after v1.0 milestone*
+*Last updated: 2026-04-08 after v0.1 milestone*
