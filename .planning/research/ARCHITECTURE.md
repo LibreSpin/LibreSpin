@@ -1,423 +1,212 @@
-# Architecture Research
+# Architecture Research — v0.2 CalcPad & NGSpice
 
 **Domain:** Claude Code skill pack — hardware design workflow
-**Researched:** 2026-04-04
-**Confidence:** HIGH (GSD and hw-concept are live, inspectable reference implementations)
+**Researched:** 2026-04-08
+**Confidence:** HIGH (existing concept skill inspected directly; CalcPad CE CLI help confirmed from live repo and trash-cached CLI help file; NGSpice batch mode from official docs)
 
-## Standard Architecture
+---
 
-### System Overview
+## Skill Pattern (from concept skill)
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                     User / Claude Code Session                    │
-│   /librespin [args]  ←  slash command entry point                │
-└────────────────────────────┬─────────────────────────────────────┘
-                             │
-┌────────────────────────────▼─────────────────────────────────────┐
-│                     Orchestrator Command                          │
-│   ~/.claude/commands/librespin/concept.md                        │
-│                                                                   │
-│   Responsibilities:                                               │
-│   • Parse arguments ($ARGUMENTS)                                  │
-│   • Load / initialize state from .librespin/state.md             │
-│   • Spawn worker agent via Task tool                              │
-│   • Handle agent return (completion, checkpoint, error)          │
-│   • Verify state file updated after agent run                    │
-└────────────────────────────┬─────────────────────────────────────┘
-                             │  Task(subagent_type="librespin-concept")
-┌────────────────────────────▼─────────────────────────────────────┐
-│                     Worker Agent (sub-agent)                      │
-│   ~/.claude/agents/librespin-concept.md                          │
-│                                                                   │
-│   Responsibilities:                                               │
-│   • Execute one phase of the workflow                            │
-│   • Read state and config on entry                               │
-│   • Write outputs to .librespin/                                 │
-│   • Update state.md on exit                                      │
-│   • Return completion/checkpoint/error to orchestrator           │
-└────────────────────────────┬─────────────────────────────────────┘
-                             │
-┌────────────────────────────▼─────────────────────────────────────┐
-│                     Shared Support Files                          │
-│   ~/.claude/librespin/templates/     — output scaffolds           │
-│   ~/.claude/librespin/references/    — domain knowledge docs      │
-└──────────────────────────────────────────────────────────────────┘
-                             │
-┌────────────────────────────▼─────────────────────────────────────┐
-│                     Project State (per repo)                      │
-│   .librespin/state.md                — phase tracking             │
-│   .librespin/config.yaml             — configurable thresholds    │
-│   .librespin/requirements.yaml       — captured requirements      │
-│   .librespin/concepts/               — generated output files     │
-└──────────────────────────────────────────────────────────────────┘
-```
+The concept skill establishes the standard LibreSpin pattern. Both new skills must follow it exactly.
 
-### Component Responsibilities
+**Two files per skill:**
 
-| Component | Responsibility | Implementation |
-|-----------|----------------|----------------|
-| Orchestrator command | Entry point, arg parsing, state load, agent spawn, return handling | Markdown file in `~/.claude/commands/librespin/` |
-| Worker agent | Phase execution, domain logic, state write, output production | Markdown file in `~/.claude/agents/` |
-| Templates | Output file scaffolds (concept, BOM, overview) | Markdown/YAML in `~/.claude/librespin/templates/` |
-| References | Domain knowledge Claude reads mid-execution | Markdown in `~/.claude/librespin/references/` |
-| State file | Cross-invocation phase tracking | `.librespin/state.md` (per-project) |
-| Config file | User-tunable thresholds (completeness %, depth) | `.librespin/config.yaml` (per-project) |
-| npx installer | Copies all above files to `~/.claude/` | `bin/install.js` (Node.js) |
+1. `skills/<name>/SKILL.md` — slash command orchestrator (thin, ≤200 lines). Handles: frontmatter tool allowlist, argument parsing, state load/init, agent spawn, return verification. All domain logic stays out.
+2. `agents/<name>.md` — worker agent frontmatter + brief capability statement. The agent's full logic lives in SKILL.md (the agent is told to load SKILL.md as its logic source). No logic duplication.
 
-## Recommended Project Structure
+**Key observed constraints from `agents/concept.md`:**
+- `run_in_background=false` is mandatory when AskUserQuestion is needed. Both calcpad and simulate will likely need interactive confirmation gates — so foreground-only.
+- The agent frontmatter declares `tools:` allowlist. CalcPad and NGSpice agents need `Bash` (to invoke CLI), `Read`, `Write`, `AskUserQuestion`, `Glob`.
+- State is stored in `.librespin/state.md` (YAML frontmatter + markdown body), read on every agent spawn.
 
-### npm Package (source repo)
-
-```
-librespin/                          # npm package root
-├── package.json                    # name: librespin, bin: librespin-install
-├── bin/
-│   └── install.js                  # npx installer — copies .claude/ tree to ~/
-├── .claude/                        # everything that lands in ~/.claude/
-│   ├── commands/
-│   │   └── librespin/
-│   │       └── concept.md          # /librespin:concept orchestrator
-│   ├── agents/
-│   │   └── librespin-concept.md    # hw-concept worker agent (ported)
-│   └── librespin/
-│       ├── templates/
-│       │   ├── requirements.yaml   # user-facing requirements schema
-│       │   ├── concept.md          # per-concept output scaffold
-│       │   ├── overview.md         # comparison matrix scaffold
-│       │   └── state.md            # initial state file template
-│       └── references/
-│           └── (future: component-selection.md, power-budgets.md, etc.)
-├── docs/
-│   └── usage.md
-└── README.md
-```
-
-### Installed Layout in `~/.claude/`
-
-```
-~/.claude/
-├── commands/
-│   └── librespin/
-│       └── concept.md              # /librespin:concept slash command
-├── agents/
-│   └── librespin-concept.md        # spawned by orchestrator
-└── librespin/
-    ├── templates/                  # read by agent when writing outputs
-    └── references/                 # domain knowledge (future)
-```
-
-### Per-Project Outputs in `.librespin/`
-
-```
-.librespin/                         # created on first /librespin:concept run
-├── state.md                        # current phase, accumulated decisions
-├── config.yaml                     # thresholds, depth setting
-├── requirements.yaml               # Phase 1 output
-└── concepts/
-    ├── concept-1.md
-    ├── concept-2.md
-    ├── concept-3.md
-    ├── comparison-matrix.md
-    └── status.md
-```
-
-### Structure Rationale
-
-- **`commands/librespin/`:** Namespaced under `librespin/` so multiple commands don't collide with other skill packs. GSD uses `commands/gsd/`. hw-concept used a flat `commands/hw-concept.md` — LibreSpin should match GSD's namespace convention.
-- **`agents/librespin-concept.md`:** Flat file — agents are singletons per skill pack in Claude Code. Named `librespin-concept` (not `hw-concept`) to live in LibreSpin's namespace.
-- **`librespin/templates/`:** Separate from `commands/` and `agents/` because templates are data, not executable instructions. Agent reads them when writing output files.
-- **`.librespin/` per-project:** Parallel to `.planning/` (GSD) and `.claude/` (session). Avoids any namespace collision.
-
-## Architectural Patterns
-
-### Pattern 1: Thin Orchestrator / Fat Agent
-
-**What:** The slash command does only coordination — argument parsing, state loading, spawning, and return handling. All domain logic lives in the agent.
-
-**When to use:** Always for Claude Code skill packs. Keeps orchestrator context budget low (15-20%) so the agent gets a fresh, large context window.
-
-**Trade-offs:** Orchestrator is simple to read and modify; agent is the complexity surface. Correct split for this domain.
-
-**Example from hw-concept:**
-```
-/hw-concept command:
-  Step 1: Parse --input, --output, --depth
-  Step 2: Check .planning/hw-concept-state.md
-  Step 3: Spawn agent with parameters
-  Step 4: Report agent return
-  Step 5: Verify state updated
-```
-The agent (AGENT.md, 6,960 lines) does everything else.
-
-### Pattern 2: Phase-Gated State Machine
-
-**What:** The workflow advances through named phases. State is written to disk after each phase. Subsequent invocations resume from current phase — not from the beginning.
-
-**When to use:** Any multi-step workflow where steps take more than one context window, or where the user needs to review and re-invoke.
-
-**Trade-offs:** Resilient to interruption; enables re-run from failure point. Requires careful state schema design upfront.
-
-**State file pattern (from hw-concept):**
+**State file pattern (from concept skill SKILL.md):**
 ```markdown
 ---
-phase: drafting
-completed: [requirements]
+phase: <phase-name>
+skill: <skill-name>
+completed: [phase1, phase2]
 ---
-# hw-concept state
-...
 ```
 
-### Pattern 3: Fresh Context Per Phase
+**Naming convention confirmed:**
+- Skill directory: `skills/<shortname>/` (e.g., `skills/concept/`, `skills/calcpad/`, `skills/simulate/`)
+- Agent file: `agents/<shortname>.md` (e.g., `agents/concept.md`, `agents/calcpad.md`, `agents/simulate.md`)
+- Slash command: `/librespin:<shortname>` — automatically derived from plugin path under `skills/<shortname>/SKILL.md`
 
-**What:** Each agent spawn starts with a clean context window. The orchestrator does NOT accumulate conversation history across phases. State is passed explicitly via files, not via chat history.
+---
 
-**When to use:** Multi-phase workflows where total token cost would exceed a single context window, or where early phases contain irrelevant detail for later phases.
+## New Files Required
 
-**Trade-offs:** Prevents context rot and hallucination from stale early content. Requires state schema to carry enough forward context.
+### Phase 1 — CalcPad CE skill
 
-### Pattern 4: Template-Driven Output
+| File | Type | Purpose |
+|------|------|---------|
+| `skills/calcpad/SKILL.md` | New | Slash command orchestrator for `/librespin:calcpad`. Parses args, loads state, spawns agent, verifies `.librespin/calcpad/` outputs. |
+| `agents/calcpad.md` | New | Worker agent declaration. Frontmatter with `tools: Read, Write, Bash, AskUserQuestion, Glob`. Brief capability statement pointing to SKILL.md for logic. |
+| `skills/calcpad/templates/calcpad-sheet.cpd` | New | Starter `.cpd` template for EE calculations (voltage divider, RC filter, power budget). Agent fills parameters and invokes `calcpad input.cpd html -s`. |
 
-**What:** Agent reads output scaffold templates before writing. Templates define structure; agent fills content. Keeps output format consistent across runs.
+### Phase 2 — NGSpice simulation skill
 
-**When to use:** Whenever the output has a repeating structure (concept files, BOM tables, comparison matrices).
+| File | Type | Purpose |
+|------|------|---------|
+| `skills/simulate/SKILL.md` | New | Slash command orchestrator for `/librespin:simulate`. Parses args, loads state, spawns agent, verifies `.librespin/simulate/` outputs. |
+| `agents/simulate.md` | New | Worker agent declaration. Frontmatter with `tools: Read, Write, Bash, AskUserQuestion, Glob`. |
+| `skills/simulate/templates/spice-netlist.cir` | New | Starter `.cir` netlist template. Contains `.tran`, `.ac`, or `.op` analysis stubs for agent to fill. Agent invokes `ngspice -b -r output.raw input.cir`. |
 
-**Trade-offs:** Agent must read template before writing output — one extra file read per output. Worth it for consistency.
+### No modifications needed to existing files
 
-### Pattern 5: Config YAML for Tunables
+The concept skill, its agent, its templates, and `bin/install.js` are untouched. The plugin marketplace auto-discovers new `skills/` subdirectories, so no manifest changes are needed for distribution.
 
-**What:** User-facing thresholds (completeness %, depth mode, iteration limits) live in `.librespin/config.yaml` rather than hardcoded in the agent. Created with defaults on first run; user can edit.
+The npx installer (`bin/install.js`) does need a **small update**: it must copy `skills/calcpad/` and `skills/simulate/` alongside `skills/concept/` during install. This is a modification to an existing file, not a new file.
 
-**When to use:** Any threshold that a user might reasonably want to adjust without editing the agent markdown.
-
-**Trade-offs:** One extra file the agent must load. Enables per-project customization without modifying installed files.
+---
 
 ## Data Flow
 
-### First Invocation (Phase 1: Requirements)
-
 ```
-User runs: /librespin:concept
-    |
-    v
-Orchestrator (concept.md)
-    | parse $ARGUMENTS → INPUT_FILE, OUTPUT_DIR, DEPTH
-    | check .librespin/state.md → not found
-    | report "Initializing new LibreSpin project..."
-    |
-    v
-Task(subagent_type="librespin-concept")
-    | [fresh context window]
-    | load config defaults (no config.yaml yet → use hardcoded defaults)
-    | enter Phase 1: Requirements
-    | if INPUT_FILE = "interactive" → AskUserQuestion loop
-    | if INPUT_FILE = path → parse YAML, score completeness, gap-fill
-    | write .librespin/requirements.yaml
-    | write .librespin/config.yaml (with chosen depth/defaults)
-    | write .librespin/state.md (phase: requirements, completed: [])
-    | return: "Phase 1 complete. Run /librespin:concept to proceed."
-    |
-    v
-Orchestrator verifies .librespin/state.md updated
-User re-invokes to proceed to Phase 2
-```
+/librespin:concept
+  Outputs: .librespin/requirements.yaml
+           .librespin/concepts/concept-1.md ... concept-N.md
+           .librespin/state.md (phase: complete, skill: concept)
 
-### Subsequent Invocations (Phase 2-9)
+         ↓  User decides to move forward with a concept
 
-```
-User runs: /librespin:concept
-    |
-    v
-Orchestrator
-    | load .librespin/state.md → current phase = "drafting"
-    | report "Resuming from Phase 2: Drafting..."
-    |
-    v
-Task(subagent_type="librespin-concept")
-    | [fresh context window]
-    | read .librespin/state.md → current phase
-    | read .librespin/config.yaml → depth, thresholds
-    | read .librespin/requirements.yaml → input for this phase
-    | read prior phase outputs if needed
-    | execute current phase
-    | write phase output files to .librespin/concepts/
-    | update .librespin/state.md → advance phase
-    | return completion or checkpoint
+/librespin:calcpad [--concept concept-1.md]
+  Reads:   .librespin/concepts/concept-1.md  (optional --concept arg)
+           .librespin/requirements.yaml      (power budget, supply voltage, key params)
+           .librespin/state.md               (checks skill: concept, phase: complete)
+  Generates: .librespin/calcpad/sheet.cpd    (CalcPad source, edited by agent)
+  Executes:  calcpad .librespin/calcpad/sheet.cpd html -s
+  Outputs:  .librespin/calcpad/sheet.html    (calculation report)
+            .librespin/calcpad/results.yaml  (key values extracted for simulate)
+            .librespin/state.md              (phase: complete, skill: calcpad)
+
+         ↓  User reviews calculation sheet, approves
+
+/librespin:simulate [--netlist path] [--type tran|ac|op]
+  Reads:   .librespin/calcpad/results.yaml   (component values from calcpad)
+           .librespin/state.md               (checks skill: calcpad, phase: complete)
+  Generates: .librespin/simulate/circuit.cir (SPICE netlist with values from results.yaml)
+  Executes:  ngspice -b -r .librespin/simulate/output.raw .librespin/simulate/circuit.cir
+  Outputs:  .librespin/simulate/output.raw   (raw simulation data)
+            .librespin/simulate/summary.md   (human-readable result narrative)
+            .librespin/state.md              (phase: complete, skill: simulate)
 ```
 
-### Checkpoint Flow (human-in-the-loop)
+**Coupling rule for v0.2:** The calcpad → simulate handoff via `results.yaml` is **optional, not enforced**. `/librespin:simulate` checks for `results.yaml` and uses values if found, but can also run standalone with a `--netlist` arg or interactive input. This prevents tight coupling that would block either skill from running independently. Full auto-chain (calcpad feeds simulate automatically) is deferred to a future milestone per PROJECT.md.
+
+---
+
+## State & Output Files
+
+### .librespin/ layout after v0.2
 
 ```
-Agent reaches checkpoint (e.g., end of requirements gathering)
-    |
-    v
-Agent returns checkpoint object to orchestrator
-    |
-    v
-Orchestrator presents checkpoint to user
-    |
-    v
-User responds / approves / edits
-    |
-    v
-Orchestrator spawns continuation agent with user input in prompt
+.librespin/
+├── state.md                        # phase/skill tracking (shared, updated by each skill)
+├── config.yaml                     # thresholds and depth (created by concept skill)
+├── requirements.yaml               # Phase 1 concept output
+├── concepts/
+│   ├── concept-1.md
+│   └── comparison-matrix.md
+├── calcpad/
+│   ├── sheet.cpd                   # CalcPad source file (agent writes, user may edit)
+│   ├── sheet.html                  # CalcPad output — rendered calculation report
+│   └── results.yaml                # Extracted key values (Vcc, R1, C1...) for simulate
+└── simulate/
+    ├── circuit.cir                 # SPICE netlist (agent writes from template + results.yaml)
+    ├── output.raw                  # NGSpice raw data file (-r flag)
+    └── summary.md                  # Human-readable: DC operating point, key node voltages, pass/fail
 ```
 
-### State Schema (forward reference)
-
-State file carries minimum viable context for next phase:
-- Current phase name
-- Completed phases list
-- Key accumulated decisions (not full conversation history)
-- Paths to prior phase output files
-
-## Component Boundaries
-
-| Boundary | What crosses it | Direction | Notes |
-|----------|-----------------|-----------|-------|
-| Orchestrator → Agent | Parameters (INPUT_FILE, OUTPUT_DIR, DEPTH, PHASE), file paths | One-way at spawn | Via Task tool prompt string |
-| Agent → Disk | State file, config, requirements, concept outputs | Write | Agent owns all .librespin/ writes |
-| Disk → Agent | State, config, requirements, templates | Read | Agent reads on entry to each phase |
-| Agent → Orchestrator | Completion status, files created, checkpoint data | One-way on return | Via Task tool return value |
-| Installer → ~/.claude/ | Commands, agents, templates, references | One-way copy | npx install.js, recursive cp |
-| Templates → Agent | Output scaffolds | Read at output-write time | Agent reads, fills, writes to .librespin/ |
-
-## npx Installer Architecture
-
-The installer is a thin Node.js script that copies the `.claude/` subtree from the npm package to the user's `~/.claude/`. It must:
-
-1. Accept `--local` flag (install to `./.claude/` for workspace-scoped installs)
-2. Accept `--help`
-3. Create target directories if missing (`mkdir -p`)
-4. Copy with `force: true` so re-install updates existing files
-5. Report each installed component with a checkmark
-6. Print "Restart Claude Code to activate" on success
-
-**What gets copied:**
-```
-Package source (.claude/)     →   Install target (~/.claude/)
-─────────────────────────────     ──────────────────────────────
-commands/librespin/           →   commands/librespin/
-agents/librespin-concept.md   →   agents/librespin-concept.md
-librespin/templates/          →   librespin/templates/
-librespin/references/         →   librespin/references/
+**State file schema extension for v0.2:**
+```yaml
+---
+phase: complete
+skill: calcpad          # most recently completed skill
+completed: [concept, calcpad]
+calcpad_sheet: .librespin/calcpad/sheet.cpd
+calcpad_results: .librespin/calcpad/results.yaml
+simulate_netlist: .librespin/simulate/circuit.cir
+---
 ```
 
-**package.json shape:**
-```json
-{
-  "name": "librespin",
-  "version": "0.1.0",
-  "bin": { "librespin-install": "./bin/install.js" },
-  "files": ["bin/", ".claude/"],
-  "engines": { "node": ">=18.0.0" }
-}
-```
+The state file is append-only per run: each skill adds its key output paths. The next skill reads paths from state rather than hardcoding them.
 
-**Install invocation:**
+### CalcPad CE CLI invocation (confirmed from CLI help)
+
 ```bash
-npx librespin-install           # global: ~/.claude/
-npx librespin-install --local   # workspace: ./.claude/
+calcpad .librespin/calcpad/sheet.cpd html -s
+# -s = silent mode (do not open output file in browser)
+# "html" shorthand = output to sheet.html in same directory
 ```
 
-## Scaling Considerations
+Binary name: `calcpad` (installed to `/usr/local/bin/calcpad` per csproj). Runtime: .NET 10. Agent must check `which calcpad` and report a clear error with install instructions if not found.
 
-This is a developer tool with a single-user execution model. Traditional scaling concerns (load, concurrency, throughput) do not apply. The relevant growth axes are:
+### NGSpice headless invocation (MEDIUM confidence — official docs)
 
-| Growth axis | Concern | Approach |
-|-------------|---------|---------|
-| More skills (v2, v3...) | `~/.claude/agents/` gets crowded | Prefix all files with `librespin-` to namespace |
-| Larger AGENT.md | Context window pressure | Split into agent + references; agent @-includes references |
-| More templates | Template discovery | Keep flat under `librespin/templates/`; name by output type |
-| Multiple Claude Code users | No shared state | Per-user `~/.claude/` and per-repo `.librespin/` isolate naturally |
+```bash
+ngspice -b -r .librespin/simulate/output.raw .librespin/simulate/circuit.cir
+# -b = batch mode (no interactive prompt)
+# -r = write rawfile
+```
 
-## Anti-Patterns
+Netlist file extension: `.cir` (conventional; `.sp` and `.net` also accepted by ngspice). Agent must check `which ngspice` and report install instructions if not found (`sudo apt install ngspice` on Debian/Ubuntu).
 
-### Anti-Pattern 1: State in Chat History
+---
 
-**What people do:** Rely on the conversation context to carry workflow state across invocations.
+## Build Order
 
-**Why it's wrong:** Each Claude Code session starts fresh. Context history is not persisted between separate `/librespin:concept` invocations. State must be written to disk.
+Build calcpad first, then simulate. Rationale: simulate depends on `results.yaml` produced by calcpad for its happy path. The agent prompt for simulate references the calcpad output format. Building simulate first requires specifying that format in the abstract, which is less reliable than building calcpad, observing its output, and then wiring simulate to it.
 
-**Do this instead:** Write `.librespin/state.md` at the end of every phase. Read it at the start of every agent spawn.
+**Recommended phase sequence:**
 
-### Anti-Pattern 2: Fat Orchestrator
+**Phase 1: CalcPad CE skill**
+1. `skills/calcpad/templates/calcpad-sheet.cpd` — define the starter EE calculation template first. The agent writes to this shape; locking the template before writing the agent avoids iteration.
+2. `agents/calcpad.md` — thin file, write after template.
+3. `skills/calcpad/SKILL.md` — orchestrator. Write last so arg schema matches what templates produce.
+4. Smoke test: install locally, run `/librespin:calcpad`, verify `.librespin/calcpad/sheet.html` is produced.
 
-**What people do:** Put domain logic (phase questions, scoring, component research) in the orchestrator command.
+**Phase 2: NGSpice simulation skill**
+1. Define `results.yaml` schema from Phase 1 output (look at actual calcpad output, extract what SPICE needs: component values with units).
+2. `skills/simulate/templates/spice-netlist.cir` — write starter netlist with correct SPICE syntax stubs.
+3. `agents/simulate.md` — thin file.
+4. `skills/simulate/SKILL.md` — orchestrator with `--type tran|ac|op` arg support.
+5. Smoke test: run `/librespin:simulate` against Phase 1 output, verify `output.raw` and `summary.md` produced.
 
-**Why it's wrong:** Orchestrator accumulates context across the conversation. Heavy logic burns the orchestrator's context budget and introduces context rot into coordination code.
+**Phase 3: Installer update**
+Update `bin/install.js` to copy `skills/calcpad/` and `skills/simulate/` to install target. This is a single-file edit touching the copy manifest. Do last so paths are confirmed stable.
 
-**Do this instead:** Orchestrator does only: parse, load state, spawn, handle return, verify. Agent does all domain work in a fresh context.
+**Do not parallelize Phase 1 and Phase 2.** The results.yaml contract between them must be defined from real Phase 1 output, not speculatively. If parallelized, the simulate agent would need revision after seeing the actual calcpad output format.
 
-### Anti-Pattern 3: Hardcoding Output Paths
+---
 
-**What people do:** Write output paths like `./concepts/` in the agent instructions.
+## Key Findings
 
-**Why it's wrong:** The orchestrator receives the output directory as a parameter and passes it to the agent. If paths are hardcoded in the agent, the `--output` flag has no effect.
+- Both new skills follow the exact same two-file pattern as concept: `skills/<name>/SKILL.md` (orchestrator) + `agents/<name>.md` (worker declaration). No exceptions, no new patterns needed.
+- CalcPad CE CLI binary is `calcpad` (installed to `/usr/local/bin/calcpad`). Invocation: `calcpad input.cpd html -s`. Input format is `.cpd` (plain text with CalcPad syntax). Output is HTML (or DOCX/PDF). .NET 10 runtime required — agent must check for CLI presence and fail gracefully.
+- NGSpice headless: `ngspice -b -r output.raw input.cir`. Standard SPICE netlist format (`.cir`). The `-b` flag suppresses interactive mode. Available via `apt install ngspice` on Ubuntu/Debian.
+- The calcpad → simulate handoff should be loose-coupled via an optional `results.yaml` in v0.2. Hard-chaining is deferred per PROJECT.md backlog item 999.1.
+- Output namespacing: `.librespin/calcpad/` and `.librespin/simulate/` as subdirectories, not flat files in `.librespin/`. Prevents filename collisions if the user runs multiple sessions.
+- State file is shared across all skills (single `.librespin/state.md`), extended with new keys per skill run. Each skill appends its output paths to state; next skill reads paths from state.
+- `bin/install.js` needs a one-time update to copy two new skill directories. This is the only modification to an existing v0.1 file.
+- Build calcpad before simulate. The `results.yaml` format must be observed from a real calcpad run before the simulate agent can be precisely specified.
+- No templates are strictly required for calcpad/simulate (unlike concept's requirements.yaml and comparison-matrix templates), but a starter `.cpd` and a starter `.cir` template reduce the agent's generation burden and improve consistency across runs.
 
-**Do this instead:** Agent always writes to the OUTPUT_DIR parameter value. Default is `.librespin/concepts/`.
-
-### Anti-Pattern 4: Modifying Installed Files to Configure
-
-**What people do:** Edit `~/.claude/agents/librespin-concept.md` to change thresholds.
-
-**Why it's wrong:** Edits are lost on next `npx librespin-install`. User-tunable values belong in `.librespin/config.yaml`.
-
-**Do this instead:** All tunables (completeness threshold, depth, iteration limits) live in the per-project config YAML. Agent reads them on startup.
-
-### Anti-Pattern 5: One Giant Command File
-
-**What people do:** Put both orchestrator logic and agent logic in the slash command file.
-
-**Why it's wrong:** Claude Code slash commands run in the main session context. For a 9-phase workflow, a single command file would accumulate enormous context. hw-concept already has AGENT.md at 6,960 lines — that must stay in the agent, not the command.
-
-**Do this instead:** Command file ≤ 200 lines. Agent file can be arbitrarily large (it runs in a fresh context per spawn).
-
-## Integration Points
-
-### External Tools (via Bash in Agent)
-
-| Tool | Integration | Notes |
-|------|-------------|-------|
-| WebSearch | Agent uses `WebSearch` tool for component research | Phase 4 (component research) |
-| CalcPad CE CLI | Future v2 — agent runs `.NET` CLI via `Bash` tool | Requires .NET 10 on host |
-| NGSpice CLI | Future v2 — agent runs `ngspice` via `Bash` tool | FOSS, apt-installable |
-| KiCad CLI | Future v4 — production export | FOSS, apt-installable |
-
-### Claude Code Agent System
-
-| Interface | How | Notes |
-|-----------|-----|-------|
-| Slash command → Agent | `Task(subagent_type="librespin-concept", prompt=...)` | subagent_type must match agent filename without `.md` |
-| Agent tools allowlist | Declared in AGENT.md frontmatter: `tools: Read, Write, WebSearch, Grep, Glob, AskUserQuestion, Bash` | `Bash` needed for future CLI integrations |
-| State file location | `.librespin/state.md` in working directory | Working directory = the user's project repo |
-
-## Suggested Build Order
-
-Build phases should respect the dependency chain from foundation to behavior:
-
-1. **npm package scaffold** — `package.json`, `bin/install.js`, directory structure. Installer must work before anything else can be validated.
-
-2. **State and config schemas** — Define `.librespin/state.md` and `.librespin/config.yaml` formats. Everything else depends on these contracts.
-
-3. **Templates** — Port `requirements.yaml`, `concept.md`, `overview.md` from hw-concept. Agent references these; they must exist before agent testing.
-
-4. **Orchestrator command** — Port `hw-concept.md` to `commands/librespin/concept.md`. Thin file; port is primarily a namespace rename and output-dir update (.librespin/).
-
-5. **Worker agent** — Port `AGENT.md` to `agents/librespin-concept.md`. Largest file; do last so command and templates are stable. Update all `.planning/` references to `.librespin/`.
-
-6. **End-to-end smoke test** — Install locally, run `/librespin:concept` in a test repo, verify all 9 phases complete and outputs land in `.librespin/`.
+---
 
 ## Sources
 
-- GSD skill pack source: `/home/william/.claude/get-shit-done/` (live, inspected 2026-04-04)
-- hw-concept source: `/home/william/repo/hw-concept/` (live, inspected 2026-04-04)
-- hw-concept orchestrator: `.claude/commands/hw-concept.md` (full read)
-- hw-concept agent frontmatter + Phases 1-2: `.claude/agents/hw-concept/AGENT.md` (partial read)
-- hw-concept installer: `bin/install.js` (full read)
-- Claude Code agent system: observed from GSD agent files in `~/.claude/agents/`
-- LibreSpin PROJECT.md: `.planning/PROJECT.md` (full read)
+- `skills/concept/SKILL.md` lines 1-100 — confirmed orchestrator pattern, argument parsing, state load/init, agent spawn (HIGH confidence, live file)
+- `agents/concept.md` — confirmed agent frontmatter pattern and tools allowlist (HIGH confidence, live file)
+- `.planning/PROJECT.md` — confirmed v0.2 scope, constraints, CalcPad CE CLI wrapping decision (HIGH confidence, live file)
+- `/home/william/.local/share/Trash/files/reference/calcpad-cli-help.TXT` — CalcPad CE CLI interface: `calcpad input.cpd html -s`, output formats, `-s` silent flag (HIGH confidence, official CLI help)
+- `/home/william/repo/CalcpadCE/Calcpad.Cli/Calcpad.Cli.csproj` — binary name `Cli`/`calcpad`, install path `/usr/local/bin/calcpad`, .NET 10 runtime (HIGH confidence, source csproj)
+- NGSpice batch mode: `ngspice -b -r rawfile netlist.cir` — from official NGSpice docs via WebSearch (MEDIUM confidence, multiple sources agree)
+- [NGSpice User's Manual](https://ngspice.sourceforge.io/docs/ngspice-html-manual/manual.xhtml) — batch mode reference
+- [NGSpice batch mode plotting discussion](https://sourceforge.net/p/ngspice/discussion/133842/thread/bc6b8cf4/) — confirmed `-b -r` pattern in practice
 
 ---
-*Architecture research for: LibreSpin — Claude Code hardware design skill pack*
-*Researched: 2026-04-04*
+*Architecture research for: LibreSpin v0.2 — CalcPad CE + NGSpice skill integration*
+*Researched: 2026-04-08*
