@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
 status: verifying
-stopped_at: "Completed 05-03-PLAN.md (checkpoint:human-verify pending user approval)"
-last_updated: "2026-04-08T15:18:58.955Z"
+stopped_at: Completed 05-03-PLAN.md — Phase 5 calcpad-ce-spike complete, user approved GO verdict
+last_updated: "2026-04-08T15:41:11.979Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 4
@@ -73,6 +73,8 @@ v0.2 roadmap decisions:
 - [Phase 05-calcpad-ce-spike]: Phase 5 verdict GO: both CalcpadCE CLI and REST API working on Linux; CLI-first recommended for Phase 6
 - [Phase 05-calcpad-ce-spike]: Phase 6 binary name: Cli (not Calcpad.Cli) — must use correct Linux assembly name
 - [Phase 05-calcpad-ce-spike]: Phase 6 server port: read dynamically from startup log or use --urls flag (port 9420 observed, not 8080)
+- [Phase 05-calcpad-ce-spike]: Phase 6 required upstream PR #1: fix CalcpadService.cs AuthSettings regression in imartincei/CalcpadCE
+- [Phase 05-calcpad-ce-spike]: Phase 6 required upstream PR #2: document Linux build path deviations in CalcpadCE README
 
 ### Roadmap Evolution
 
@@ -84,10 +86,10 @@ None.
 
 ### Blockers/Concerns
 
-CRITICAL (Phase 5 spike): CalcPad CE Linux binary availability unconfirmed — no pre-built binary confirmed in research. Spike must resolve before Phase 6 begins.
+None. Phase 5 spike resolved: CalcPad CE CLI and REST API both working on Linux (GO verdict). Phase 6 unblocked.
 
 ## Session Continuity
 
-Last session: 2026-04-08T15:18:58.952Z
-Stopped at: Completed 05-03-PLAN.md (checkpoint:human-verify pending user approval)
+Last session: 2026-04-08T15:41:11.974Z
+Stopped at: Completed 05-03-PLAN.md — Phase 5 calcpad-ce-spike complete, user approved GO verdict
 Resume file: None

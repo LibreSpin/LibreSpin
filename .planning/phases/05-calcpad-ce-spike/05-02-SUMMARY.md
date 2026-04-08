@@ -199,6 +199,16 @@ Plan 03 (spike report) can proceed immediately. All evidence files are in `/tmp/
 
 Phase 6 will choose between CLI wrapping or REST-based skill. Both options are de-risked.
 
+## Self-Check: PASSED
+
+- FOUND: 05-02-SUMMARY.md
+- FOUND: /tmp/spike-calcpad/test.cpd
+- FOUND: /tmp/spike-calcpad/cli-output.html
+- FOUND: /tmp/spike-calcpad/server-stdout.log
+- FOUND: /tmp/spike-calcpad/rest-response.html
+- FOUND: /tmp/spike-calcpad/rest-headers.txt
+- Commit d4ca3ae exists in git log
+
 ---
 *Phase: 05-calcpad-ce-spike*
 *Completed: 2026-04-08*
