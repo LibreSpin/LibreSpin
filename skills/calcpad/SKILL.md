@@ -64,9 +64,13 @@ fi
 CalcPad CE CLI not found at ~/.librespin/bin/Cli
 
 Install (Linux x64):
-  mkdir -p ~/.librespin/bin
+  mkdir -p ~/.librespin/bin ~/.librespin/bin/doc
   curl -L https://github.com/LibreSpin/CalcpadCE/releases/latest/download/Cli -o ~/.librespin/bin/Cli
   chmod +x ~/.librespin/bin/Cli
+  curl -L https://raw.githubusercontent.com/LibreSpin/CalcpadCE/librespin-patched/Calcpad.Cli/doc/template.html -o ~/.librespin/bin/doc/template.html
+  curl -L https://raw.githubusercontent.com/LibreSpin/CalcpadCE/librespin-patched/Calcpad.Cli/doc/jquery-3.6.3.min.js -o ~/.librespin/bin/doc/jquery-3.6.3.min.js
+
+Note: The Cli binary requires doc/template.html to be present in the same directory.
 
 Or re-run with --rest to use the REST API fallback (requires Calcpad.Server binary).
 ```
@@ -82,11 +86,13 @@ Options:
   3. Exit — I'll install manually and re-run
 ```
 
-- On option 1 (install now): Run these three commands via Bash:
+- On option 1 (install now): Run these five commands via Bash:
   ```bash
-  mkdir -p "$HOME/.librespin/bin"
+  mkdir -p "$HOME/.librespin/bin" "$HOME/.librespin/bin/doc"
   curl -L https://github.com/LibreSpin/CalcpadCE/releases/latest/download/Cli -o "$HOME/.librespin/bin/Cli"
   chmod +x "$HOME/.librespin/bin/Cli"
+  curl -L https://raw.githubusercontent.com/LibreSpin/CalcpadCE/librespin-patched/Calcpad.Cli/doc/template.html -o "$HOME/.librespin/bin/doc/template.html"
+  curl -L https://raw.githubusercontent.com/LibreSpin/CalcpadCE/librespin-patched/Calcpad.Cli/doc/jquery-3.6.3.min.js -o "$HOME/.librespin/bin/doc/jquery-3.6.3.min.js"
   ```
   Then set `USE_REST=false` and continue.
 - On option 2 (REST fallback): Set `USE_REST=true` and continue.
@@ -188,3 +194,5 @@ The following facts are hard-coded from Phase 5 spike evidence. Do not change th
 - **Agent MUST be spawned foreground (`run_in_background: false`)** — The calcpad agent uses AskUserQuestion for worksheet review and result approval. If backgrounded, these prompts never surface to the user and the agent burns ~100k tokens before timing out. Pitfall 4. (Per MEMORY.md: "Phase 1 must be foreground".)
 
 - **Install URL:** `https://github.com/LibreSpin/CalcpadCE/releases/latest/download/Cli` — This is the verified download URL from Phase 6 Plan 01 (CI run 24148593487, HTTP 200 verified).
+
+- **`doc/template.html` is required alongside the binary** — The self-contained `PublishSingleFile` binary does NOT embed the HTML template. The binary looks for `./doc/template.html` relative to its own location (`~/.librespin/bin/doc/template.html`). Without this file the CLI crashes with "Cannot read keys when either application does not have a console". Install template.html and jquery-3.6.3.min.js from the fork source alongside the binary. (E2E evidence: fix applied during Plan 02, verified exit=0 after template install.)
