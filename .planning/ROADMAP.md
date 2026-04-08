@@ -97,3 +97,24 @@
 | 6. CalcPad CE Skill | v0.2 | 2/3 | In Progress|  |
 | 7. NGSpice Simulation Skill | v0.2 | 2/2 | Complete   | 2026-04-08 |
 | 8. Installer Update | v0.2 | 1/1 | Complete   | 2026-04-08 |
+
+## Backlog
+
+### Phase 999.3: Distributor API Integration (BACKLOG)
+
+**Goal:** Enable real-time component inventory and pricing verification via distributor APIs, replacing the current bot-blocked WebFetch approach. Provide secure, user-friendly API key management for multiple suppliers.
+
+**Requirements:** TBD
+
+**Plans:** 0 plans (promote with /gsd:review-backlog when ready)
+
+**Context captured:**
+- **Suppliers to research:** Nexar/Octopart (GraphQL, free tier: 100 parts), DigiKey API (OAuth, developer.digikey.com), Mouser API, Arrow, Newark/Farnell, LCSC (low-cost Chinese parts)
+- **Key research question:** Which suppliers have public APIs vs. require enterprise agreements? What are rate limits and free tier caps?
+- **API key storage:** Design a secure per-project env file (e.g., `.librespin/.env` or `~/.librespin/credentials`) — gitignored by default
+- **UX goal:** Make key setup as frictionless as possible (e.g., `/librespin:setup` command that walks user through key entry and validates each API)
+- **Nexar free tier:** 100 matched parts total — suitable for light use, will need paid plan for heavy BOM work
+- **Current workaround:** Skill falls back to manufacturer sites (TI, STM, Nordic) for lifecycle/datasheet; flags inventory as human-verify
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)
