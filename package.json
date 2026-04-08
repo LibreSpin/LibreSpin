@@ -9,8 +9,7 @@
   "files": [
     "bin/",
     "skills/",
-    "agents/",
-    "librespin/"
+    "agents/"
   ],
   "engines": {
     "node": ">=18.0.0"

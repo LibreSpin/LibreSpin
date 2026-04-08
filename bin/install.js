@@ -72,7 +72,7 @@ async function install() {
 
     // Copy templates directory (recursive)
     await cp(
-      join(sourceBase, 'librespin', 'templates'),
+      join(sourceBase, 'skills', 'librespin-concept', 'templates'),
       join(targetBase, 'librespin', 'templates'),
       { recursive: true, force: true }
     );
