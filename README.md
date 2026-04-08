@@ -2,33 +2,36 @@
 
 AI-driven hardware concept design for Claude Code. Describe your circuit in plain English and LibreSpin generates 4-6 fully evaluated architecture concepts — complete with bills of materials, block diagrams, and a side-by-side comparison matrix.
 
-**Status:** Pre-alpha. The concept workflow is functional; SPICE simulation, KiCad integration, and production export are on the v2+ roadmap.
+## What's Available
+
+| Feature | Status |
+|---------|--------|
+| `/librespin:concept` — 9-phase concept workflow | ✅ v1.0 |
+| Plugin marketplace install | ✅ v1.0 |
+| Circuit calculations (CalcPad CE) | 📋 v2.0 |
+| SPICE simulation (NGSpice) | 📋 v2.0 |
+| ERC / DRC / DFM checks | 📋 v3.0 |
+| Production file export (KiCad CLI) | 📋 v4.0 |
+| Schematic + PCB layout | 📋 v5–6.0 |
 
 ## Install
-
-**Via Claude Code plugin marketplace (recommended)**
 
 ```
 /plugin marketplace add LibreSpin/LibreSpin
 /plugin install librespin
 ```
 
-**Via npx (also installs YAML templates)**
+Then reload plugins when prompted.
 
-```
-npx librespin-install
-```
-
-Use `--local` to install into the current project's `.claude/` instead of `~/.claude/`.
+> **npx install is not yet supported.** The `npx librespin-install` path is present in the repo but not yet published to npm. Use the plugin marketplace above.
 
 ## Prerequisites
 
 - [Claude Code](https://claude.ai/code)
-- Node.js >= 18 (only required for the npx installer)
 
 ## Quick Start
 
-After installing, restart Claude Code, open any project, and run:
+After installing, open any project and run:
 
 ```
 /librespin:concept
@@ -51,10 +54,8 @@ Expect the full workflow to take roughly 5-15 minutes depending on complexity. A
 ## Uninstall
 
 ```
-npx librespin-install --uninstall
+/plugin uninstall librespin
 ```
-
-Add `--local` if you installed locally.
 
 ## License
 

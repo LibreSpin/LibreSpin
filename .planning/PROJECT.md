@@ -2,7 +2,7 @@
 
 ## What This Is
 
-An open-source, AI-driven end-to-end PCB and embedded circuit design workflow tool — packaged as a Claude Code skill pack (like GSD). LibreSpin wraps Claude Code with domain-specific skills that guide hardware designers from natural language requirements through to production-ready Gerber files. Target users: EE professionals, hobbyists, students, and anyone designing circuit boards.
+An open-source, AI-driven hardware concept design tool — packaged as a Claude Code skill pack. LibreSpin wraps Claude Code with a 9-phase concept workflow that guides hardware designers from natural language requirements through architecture concepts, component BOMs, and a ranked comparison matrix. Install via Claude Code plugin marketplace or npx. Target users: EE professionals, hobbyists, students, and anyone starting a circuit board design.
 
 ## Core Value
 
@@ -12,34 +12,48 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 
 ### Validated
 
-- [x] npx installer distributes skill pack to ~/.claude/ — Validated in Phase 1: Package Scaffold
-- [x] Hardware concept agent ported from hw-concept repo and packaged as LibreSpin skill — Validated in Phase 2: Namespace Port
+- ✓ npx installer distributes skill pack to ~/.claude/ — v1.0
+- ✓ Hardware concept agent ported from hw-concept and packaged as LibreSpin skill — v1.0
+- ✓ Concept agent works end-to-end: requirements interview through concept recommendation — v1.0 (IoT sensor node: 5 concepts, 4 validated, STM32L053+LoRaWAN recommended at 92/100)
+- ✓ LibreSpin outputs stored in .librespin/ (separate from GSD .planning/) — v1.0
+- ✓ Existing hw-concept 9-phase workflow preserved — v1.0
+- ✓ Plugin marketplace distribution (`/plugin marketplace add LibreSpin/LibreSpin`) — v1.0
+- ✓ Clean uninstall via `npx librespin-install --uninstall` — v1.0
 
 ### Active
-- [ ] Concept agent works end-to-end: requirements interview through concept recommendation
-- [ ] LibreSpin outputs stored in .librespin/ (separate from GSD .planning/)
-- [ ] Existing hw-concept 9-phase workflow preserved (requirements, drafting, validation, component research, concept generation, self-critique, refinement, final generation, output)
+
+- [ ] CalcPad CE CLI skill (`/librespin:calcpad`) — v2
+- [ ] NGSpice simulation skill (`/librespin:simulate`) — v2
+- [ ] SKILL.md split into per-phase files to reduce 239KB context pressure — v2 (backlog 999.2)
+- [ ] Auto-chain phases (eliminate re-invoke between phases) — v2 (backlog 999.1)
 
 ### Out of Scope
 
-- CalcPad CE skill — v2 milestone
-- NGSpice simulation skill — v2 milestone
-- ERC/DRC/DFM automated checks — v3 milestone
-- Production file export (KiCad CLI) — v4 milestone
-- Schematic layout — v5 milestone
-- PCB layout + human review report — v6 milestone
-- Provider abstraction (OpenAI, Gemini, etc.) — premature; prompts are the portable part
+- Provider abstraction (OpenAI, Gemini) — prompts are the portable part; abstraction is premature
 - Python runtime code — skill pack is markdown files, not a Python application
 - GUI/TUI/web interface — CLI-first via Claude Code
+- Autonomous BOM without human gate — hallucination risk (wrong topology, fabricated components)
+- Fully autonomous end-to-end pipeline — accuracy compounds across phases; human checkpoints are the right architecture
+- KiCad integration (schematic/PCB) — v5–v6 milestones
+- ERC/DRC/DFM automated checks — v3 milestone
+- Production file export (KiCad CLI) — v4 milestone
+- npm registry publish — plugin marketplace is the primary v1 distribution; npm is secondary and deferred
 
 ## Context
 
-**Architecture:** Pure Claude Code skill pack — markdown files for agents, commands, and templates. Same pattern as GSD. No Python runtime code needed. The pyproject.toml in the repo is vestigial from early planning; the actual deliverable is a skill pack installed via npx.
+**Shipped v1.0:** Pure Claude Code skill pack — `skills/concept/SKILL.md` (239KB, ~58k tokens), `agents/concept.md`, 3 YAML templates. Installed via plugin marketplace (primary) or npx (secondary). Plugin command: `/librespin:concept`.
 
-**hw-concept (source):** Existing 9-phase hardware concept agent at /home/william/repo/hw-concept. Node.js/npm package with Claude Code agent system. AGENT.md (6,960 lines), orchestrator command, YAML templates, configurable thresholds. Forked into LibreSpin — original repo stays alive separately.
+**Architecture:** No Python, no build step, no runtime dependencies. Intelligence lives in the 239KB SKILL.md prompt. Worker agent (`librespin:concept`) handles multi-phase state via `.librespin/state.md` in each project.
+
+**Known tech debt:**
+- SKILL.md at 239KB is very large — per-phase file split tracked in backlog (999.2)
+- Background agent pattern blocks AskUserQuestion — librespin-concept agents must always run foreground
+- Templates installed by npx to `~/.claude/librespin/templates/`; plugin marketplace auto-discovers from `skills/concept/templates/` — SKILL.md paths reference the npx target, not plugin target (acceptable for v1)
+
+**hw-concept (source):** Forked from /home/william/repo/hw-concept. Original repo stays alive. LibreSpin does not reference employer IP.
 
 **Target pipeline (full vision across all milestones):**
-1. Natural language requirements interview (v1 — concept agent)
+1. Natural language requirements interview → concept recommendation (v1 ✓)
 2. AI-assisted circuit calculations via CalcPad CE CLI (v2)
 3. SPICE simulation via NGSpice CLI (v2)
 4. ERC / DRC / DFM checks (v3)
@@ -47,65 +61,51 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 6. Schematic layout (v5)
 7. PCB layout + human review report (v6)
 
-**AI autonomy varies by pipeline stage:**
-- Requirements interview: AI fully drives (conversational, like GSD questioning)
-- CalcPad + NGSpice: AI autonomous — iterates calculations 3-5 times for accuracy
-- Schematic/PCB layout: Open question — complex workflow, figure out in v5/v6
-- ERC/DRC/DFM: Nearly autonomous with manual checks at the end
-- Production export: Fully autonomous via KiCad CLI/Bash
-- Human review: Human-driven (by definition)
-
-**CalcPad CE:** Open-source community edition (MIT, github.com/imartincei/CalcpadCE). Unrelated to any employer IP — freely referenceable. CLI requires .NET 10 runtime (acceptable prerequisite). Integration via CLI wrapping, not Python bridge.
-
-**Naming:** Display as `LibreSpin` (CamelCase); slugs/packages use `librespin` (lowercase). Follows LibrePCB convention: `Libre` = open source, `Spin` = EE slang for board design cycle.
-
-**Inspiration:** GSD skill pack architecture. Claude Code on its own is a good model, but the harness (Claude Code) gives it real power. LibreSpin aims to be that harness for hardware design.
-
 ## Constraints
 
 - **License**: MIT — open source from day one
 - **EDA stack**: FOSS only — KiCad + NGSpice. No proprietary EDA dependencies
 - **Minimalism**: Primary design goal. Fewer lines of code, not more. Markdown over Python. Prompt engineering over software engineering
 - **CalcPad CE**: Clean-room skill implementation wrapping the CLI. Can reference CalcPad CE freely. Cannot reference or port employer's CalcPad skill
-- **Distribution**: npx installer (like hw-concept) — copies skill files to ~/.claude/
+- **Distribution**: Plugin marketplace (primary) + npx installer (secondary) — copies skill files to ~/.claude/
 - **Output directory**: .librespin/ per project (separate from GSD .planning/)
-- **Python**: >= 3.10 (for any future utility scripts; not needed for v1 skill pack)
 - **Node.js**: >= 18.0.0 (for npx installer)
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Pure Claude Code skill pack (Option A) | Maximizes minimalism. Intelligence in prompts, not code. GSD proves pattern scales. | Validated (Phase 2) |
-| Fork hw-concept, don't rewrite | It works. Port with minimal changes, refine in a later phase. Can't optimize what you haven't measured. | Validated (Phase 2) |
-| One GSD milestone per version | Each version has distinct scope. Planning v4 before v2 exists would be speculative. | -- Pending |
-| .librespin/ for outputs | Avoids conflict with GSD .planning/. Clean separation of concerns. | -- Pending |
-| npx installer | Proven pattern (hw-concept uses it). Familiar to Node.js ecosystem. | Validated (Phase 1) |
-| CalcPad CE CLI wrapping | Token-efficient skill that knows exact commands. .NET 10 runtime acceptable as prerequisite. | -- Pending |
+| Pure Claude Code skill pack | Maximizes minimalism. Intelligence in prompts, not code. GSD proves pattern scales. | ✓ Validated — shipped as 239KB SKILL.md |
+| Fork hw-concept, don't rewrite | It works. Port with minimal changes, refine later. Can't optimize what you haven't measured. | ✓ Validated — port took 2 phases, workflow works |
+| One GSD milestone per version | Each version has distinct scope. Prevents speculative planning. | ✓ Validated — clean v1.0 boundary |
+| .librespin/ for outputs | Avoids conflict with GSD .planning/. Clean separation of concerns. | ✓ Validated — no conflicts observed |
+| npx installer | Proven pattern (hw-concept uses it). Familiar to Node.js ecosystem. | ✓ Validated — install/uninstall round-trip works |
+| Plugin marketplace as primary distribution | Integrated into Claude Code UI — no terminal required. `source: "."` was invalid; needed `{"source":"url","url":"..."}` | ✓ Validated — marketplace add + plugin install works |
+| skills/concept/ not skills/librespin-concept/ | Avoids plugin namespace collision (`librespin/` dir caused recursive cache install) | ✓ Validated — `/librespin:concept` works cleanly |
+| CalcPad CE CLI wrapping | Token-efficient skill. .NET 10 runtime acceptable as prerequisite. | — Pending (v2) |
 
 ## Milestone Overview
 
-| Milestone | Version | Scope |
-|-----------|---------|-------|
-| 1 | v1 | Concept agent port + skill pack packaging + npx installer |
-| 2 | v2 | CalcPad CE CLI skill + NGSpice simulation skill |
-| 3 | v3 | Automated ERC/DRC/DFM checks |
-| 4 | v4 | Production file export via KiCad CLI |
-| 5 | v5 | Schematic layout |
-| 6 | v6 | PCB layout + human review report |
+| Milestone | Version | Scope | Status |
+|-----------|---------|-------|--------|
+| 1 | v1.0 | Concept agent port + skill pack packaging + distribution | ✅ Shipped 2026-04-07 |
+| 2 | v2.0 | CalcPad CE CLI skill + NGSpice simulation + SKILL.md optimization | 📋 Planned |
+| 3 | v3.0 | Automated ERC/DRC/DFM checks | 📋 Planned |
+| 4 | v4.0 | Production file export via KiCad CLI | 📋 Planned |
+| 5 | v5.0 | Schematic layout | 📋 Planned |
+| 6 | v6.0 | PCB layout + human review report | 📋 Planned |
 
-**Current milestone:** 1 (v1)
+**Current milestone:** 2 (v2.0)
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
 **After each phase transition** (via `/gsd:transition`):
-1. Requirements invalidated? -> Move to Out of Scope with reason
-2. Requirements validated? -> Move to Validated with phase reference
-3. New requirements emerged? -> Add to Active
-4. Decisions to log? -> Add to Key Decisions
-5. "What This Is" still accurate? -> Update if drifted
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
 
 **After each milestone** (via `/gsd:complete-milestone`):
 1. Full review of all sections
@@ -114,4 +114,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-05 after Phase 2 completion*
+*Last updated: 2026-04-08 after v1.0 milestone*
