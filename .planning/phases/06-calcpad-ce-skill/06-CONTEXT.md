@@ -16,38 +16,39 @@ Skill structure follows the established pattern: `skills/calcpad/SKILL.md` + `ag
 ## Implementation Decisions
 
 ### Binary Distribution (CALC-01)
-- **D-01:** Pre-built self-contained Linux binaries hosted as GitHub Releases in `LibreSpin/calcpad-ce-linux` (new repo to create). Skill installs via `curl -L .../releases/latest/download/Cli -o ~/.librespin/bin/Cli`. No build step, no .NET required at user runtime.
-- **D-02:** The AuthSettings patch (CalcpadService.cs fix from spike) is baked into the published binary — not applied at install time. Users get a clean binary download.
-- **D-03:** Binary source: built from CalcpadCE @ commit `3bc026b70c78a4385bd222c68620374be80f3be0` with the AuthSettings patch applied. `LibreSpin/calcpad-ce-linux` repo maintains the build recipe.
+- **D-01:** Pre-built self-contained Linux binaries hosted as GitHub Releases in `LibreSpin/CalcpadCE` — a full fork of `imartincei/CalcpadCE`. Skill installs via `curl -L .../releases/latest/download/Cli -o ~/.librespin/bin/Cli`. No build step, no .NET required at user runtime.
+- **D-02:** The AuthSettings patch (CalcpadService.cs fix from spike) is applied permanently in the fork — baked into every published binary. Users get a clean binary download.
+- **D-03:** Binary source: `LibreSpin/CalcpadCE` fork, pinned initially to commit `3bc026b70c78a4385bd222c68620374be80f3be0` with the patch applied. GitHub Actions CI builds the self-contained Linux binary and publishes it as a GitHub Release on tag.
+- **D-04:** `LibreSpin/CalcpadCE` serves dual purpose: (1) binary distribution via GitHub Releases, (2) upstream contribution path — PRs to `imartincei/CalcpadCE` are submitted from this fork. No personal fork needed.
 
 ### REST Fallback (CALC-08)
-- **D-04:** REST fallback activates only when the `Cli` binary is not found at startup (prereq check fails). Not a runtime fallback.
-- **D-05:** REST path: `POST /api/calcpad/convert` with `{"Content": "<cpd text>"}`, response is `text/html`. Start server with `--urls http://localhost:{port}` to pin port. Parse `Now listening on:` from server stdout to confirm bound URL.
-- **D-06:** CLI-first is the primary path; REST is explicitly the fallback for environments where the binary can't be installed.
+- **D-05:** REST fallback activates only when the `Cli` binary is not found at startup (prereq check fails). Not a runtime fallback.
+- **D-06:** REST path: `POST /api/calcpad/convert` with `{"Content": "<cpd text>"}`, response is `text/html`. Start server with `--urls http://localhost:{port}` to pin port. Parse `Now listening on:` from server stdout to confirm bound URL.
+- **D-07:** CLI-first is the primary path; REST is explicitly the fallback for environments where the binary can't be installed.
 
 ### Circuit Block Selection (CALC-02)
-- **D-07:** Default: skill reads `.librespin/07-final-output/`, identifies all circuit blocks, and presents a menu for the user to select which block to calculate this session.
-- **D-08:** `--auto` flag: skips the menu and auto-selects the primary/recommended block from the concept output. User can set this as their default for unattended runs.
+- **D-08:** Default: skill reads `.librespin/07-final-output/`, identifies all circuit blocks, and presents a menu for the user to select which block to calculate this session.
+- **D-09:** `--auto` flag: skips the menu and auto-selects the primary/recommended block from the concept output. User can set this as their default for unattended runs.
 
 ### Worksheet Generation (CALC-03)
-- **D-09:** Draft-then-review flow: Claude generates the `.cpd` worksheet from design targets extracted from `.librespin/07-final-output/` and shows the draft inline in chat before running the CLI.
-- **D-10:** User reviews the worksheet in-session. If corrections are needed, user types them directly in chat — Claude applies changes to the `.cpd` content and confirms before execution.
-- **D-11:** After user approval, Claude runs the CLI and presents results. Human review gate (CALC-06) occurs after results are shown — not before.
+- **D-10:** Draft-then-review flow: Claude generates the `.cpd` worksheet from design targets extracted from `.librespin/07-final-output/` and shows the draft inline in chat before running the CLI.
+- **D-11:** User reviews the worksheet in-session. If corrections are needed, user types them directly in chat — Claude applies changes to the `.cpd` content and confirms before execution.
+- **D-12:** After user approval, Claude runs the CLI and presents results. Human review gate (CALC-06) occurs after results are shown — not before.
 
 ### CLI Invocation (CALC-04)
-- **D-12:** Binary name on Linux: `Cli` (not `Calcpad.Cli`). Installed to `~/.librespin/bin/Cli`.
-- **D-13:** Success detection: exit code 0 AND output file exists. CLI produces no stdout/stderr with `-s` flag — do not attempt stdout parsing.
-- **D-14:** Command: `~/.librespin/bin/Cli input.cpd output.html -s`
+- **D-13:** Binary name on Linux: `Cli` (not `Calcpad.Cli`). Installed to `~/.librespin/bin/Cli`.
+- **D-14:** Success detection: exit code 0 AND output file exists. CLI produces no stdout/stderr with `-s` flag — do not attempt stdout parsing.
+- **D-15:** Command: `~/.librespin/bin/Cli input.cpd output.html -s`
 
 ### Upstream PR Deliverables
-- **D-15:** Phase 6 produces PR content (diff + description) as `.planning/` artifacts for two PRs:
+- **D-16:** Phase 6 produces PR content (diff + description) as `.planning/` artifacts for two PRs to submit from `LibreSpin/CalcpadCE` → `imartincei/CalcpadCE`:
   1. CalcpadService.cs AuthSettings fix (build-breaking for source builds)
   2. Linux build documentation (binary naming, port anomaly, dotnet-install.sh path)
-- **D-16:** PRs are NOT auto-submitted via `gh pr create` — user submits to `imartincei/CalcpadCE` manually when ready. Phase 6 completion does not depend on upstream acceptance.
-- **D-17:** These PRs are goodwill contributions — Phase 6 ships independently of upstream PR status (binaries are pre-built and self-contained).
+- **D-17:** PRs are NOT auto-submitted — user submits manually when ready. Phase 6 completion does not depend on upstream acceptance.
+- **D-18:** These are goodwill contributions. Phase 6 ships independently — binaries in `LibreSpin/CalcpadCE` releases already have the patch applied.
 
 ### Output (CALC-07)
-- **D-18:** Worksheet (`.cpd`) and results (HTML output) saved to `.librespin/08-calculations/`.
+- **D-19:** Worksheet (`.cpd`) and results (HTML output) saved to `.librespin/08-calculations/`.
 
 ### Claude's Discretion
 - Exact `.cpd` syntax and formula structure Claude generates per circuit type (voltage divider, buck converter, LDO, etc.)
@@ -97,8 +98,8 @@ No other external specs — all requirements are captured in decisions above and
 <specifics>
 ## Specific Ideas
 
-- `LibreSpin/calcpad-ce-linux` is a new repo to create in the LibreSpin org — it hosts pre-built binaries as GitHub Releases and contains the build recipe (the pinned commit + patch)
-- Option D (submit AuthSettings PR upstream to `imartincei/CalcpadCE`) is a future user action — not Phase 6 scope
+- `LibreSpin/CalcpadCE` is a new fork to create in the LibreSpin org — it hosts the patched source and publishes pre-built binaries via GitHub Actions CI on tag. One repo serves both binary distribution and upstream contribution.
+- Upstream PRs are submitted from `LibreSpin/CalcpadCE` → `imartincei/CalcpadCE` (standard fork-PR workflow). No personal fork needed — `WilliamxLeismer` contributes as a LibreSpin org member.
 - VSCode CalcPad CE extension is user workflow for worksheet authoring preview — not LibreSpin skill scope
 
 </specifics>
@@ -106,7 +107,7 @@ No other external specs — all requirements are captured in decisions above and
 <deferred>
 ## Deferred Ideas
 
-- Option D (upstream CalcpadCE PRs) — user will submit to `imartincei/CalcpadCE` manually after Phase 6 ships
+- Upstream CalcpadCE PRs — produced as artifacts in Phase 6, submitted from `LibreSpin/CalcpadCE` → `imartincei/CalcpadCE` by user when ready
 - Windows/macOS binary packaging — spike was Linux-only; cross-platform distribution deferred to future milestone
 - CalcPad CE version pinning strategy (what triggers a binary update in `LibreSpin/calcpad-ce-linux`) — operational decision, not Phase 6 scope
 - Output quality validation with realistic engineering calculations — Phase 6 functional tests use a simple worksheet; full validation deferred
