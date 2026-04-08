@@ -21,7 +21,7 @@
 
 - [ ] **Phase 5: CalcPad CE Spike** — Verify CalcPad CE CLI binary, .NET 10, headless mode, and REST API fallback on this system
 - [ ] **Phase 6: CalcPad CE Skill** — `/librespin:calcpad` skill — prereq check, worksheet generation, CLI invocation, validation, human gate, output save
-- [ ] **Phase 7: NGSpice Simulation Skill** — `/librespin:simulate` skill — netlist generation, batch run, result parsing, convergence diagnosis, human gate, output save
+- [x] **Phase 7: NGSpice Simulation Skill** — `/librespin:simulate` skill — netlist generation, batch run, result parsing, convergence diagnosis, human gate, output save (completed 2026-04-08)
 - [ ] **Phase 8: Installer Update** — Update `bin/install.js` to copy calcpad and simulate skill files alongside concept
 
 ### 🗂 Backlog
@@ -95,5 +95,5 @@
 | 4. Distribution and Docs | v0.1 | 3/3 | Complete | 2026-04-07 |
 | 5. CalcPad CE Spike | v0.2 | 2/3 | In Progress|  |
 | 6. CalcPad CE Skill | v0.2 | 2/3 | In Progress|  |
-| 7. NGSpice Simulation Skill | v0.2 | 1/2 | In Progress|  |
+| 7. NGSpice Simulation Skill | v0.2 | 2/2 | Complete   | 2026-04-08 |
 | 8. Installer Update | v0.2 | 0/? | Not started | - |

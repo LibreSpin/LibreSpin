@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
-status: executing
-stopped_at: Completed 07-01-PLAN.md — skills/simulate/SKILL.md and agents/simulate.md written
-last_updated: "2026-04-08T20:30:08.843Z"
+status: verifying
+stopped_at: Completed 07-02-PLAN.md — E2E fixture + ngspice validation complete, Phase 7 done
+last_updated: "2026-04-08T20:43:57.697Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 Phase: 07 (ngspice-simulation-skill) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-08
 
 Progress: [----------] 0% (0/4 phases)
@@ -82,6 +82,8 @@ v0.2 roadmap decisions:
 - [Phase 06-calcpad-ce-skill]: Output contract frozen: .librespin/08-calculations/{slug}.cpd/.html/-summary.md for Phase 7 NGSpice consumption
 - [Phase 07]: run_in_background: false enforced on simulate agent — AskUserQuestion stalls silently if backgrounded
 - [Phase 07]: wrdata ASCII output chosen over binary .raw — plain text parseable by awk/grep
+- [Phase 07-ngspice-simulation-skill]: agents/simulate.md requires no changes: all documented error substrings and wrdata parse logic confirmed accurate against NGSpice 42 on Ubuntu noble
+- [Phase 07-ngspice-simulation-skill]: Floating-node circuit does NOT trigger singular matrix in NGSpice 42; only true topological singularity (parallel voltage sources) triggers ERR-2
 
 ### Roadmap Evolution
 
@@ -97,6 +99,6 @@ None. Phase 5 spike resolved: CalcPad CE CLI and REST API both working on Linux 
 
 ## Session Continuity
 
-Last session: 2026-04-08T20:30:08.839Z
-Stopped at: Completed 07-01-PLAN.md — skills/simulate/SKILL.md and agents/simulate.md written
+Last session: 2026-04-08T20:43:57.692Z
+Stopped at: Completed 07-02-PLAN.md — E2E fixture + ngspice validation complete, Phase 7 done
 Resume file: None
