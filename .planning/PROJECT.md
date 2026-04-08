@@ -97,6 +97,14 @@ A minimal, lightweight harness that makes Claude Code an expert hardware design 
 
 **Current milestone:** 2 (v0.2)
 
+## Current Milestone: v0.2 CalcPad & NGSpice
+
+**Goal:** Add AI-assisted circuit calculations and SPICE simulation as LibreSpin skills, completing the core post-concept workflow.
+
+**Target features:**
+- CalcPad CE CLI skill (`/librespin:calcpad`) — wraps CalcPad CE CLI for component calculations
+- NGSpice simulation skill (`/librespin:simulate`) — wraps `ngspice -b` for headless SPICE simulation
+
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
@@ -114,4 +122,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-08 after v0.1 milestone*
+*Last updated: 2026-04-08 — v0.2 milestone started*
