@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
-status: verifying
-stopped_at: Completed 05-03-PLAN.md — Phase 5 calcpad-ce-spike complete, user approved GO verdict
-last_updated: "2026-04-08T15:43:40.458Z"
+status: executing
+stopped_at: Completed 06-03-PLAN.md — upstream PR artifacts created
+last_updated: "2026-04-08T17:07:33.884Z"
 last_activity: 2026-04-08
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 6
+  completed_plans: 4
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-08)
 
 **Core value:** A minimal, lightweight harness that makes Claude Code an expert hardware design assistant — the intelligence lives in the prompts, not in code.
-**Current focus:** Phase 05 — calcpad-ce-spike
+**Current focus:** Phase 06 — calcpad-ce-skill
 
 ## Current Position
 
-Phase: 6
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 06 (calcpad-ce-skill) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-04-08
 
 Progress: [----------] 0% (0/4 phases)
@@ -75,6 +75,7 @@ v0.2 roadmap decisions:
 - [Phase 05-calcpad-ce-spike]: Phase 6 server port: read dynamically from startup log or use --urls flag (port 9420 observed, not 8080)
 - [Phase 05-calcpad-ce-spike]: Phase 6 required upstream PR #1: fix CalcpadService.cs AuthSettings regression in imartincei/CalcpadCE
 - [Phase 05-calcpad-ce-spike]: Phase 6 required upstream PR #2: document Linux build path deviations in CalcpadCE README
+- [Phase 06]: PR artifacts are documentation-only — user submits manually to imartincei/CalcpadCE when ready
 
 ### Roadmap Evolution
 
@@ -90,6 +91,6 @@ None. Phase 5 spike resolved: CalcPad CE CLI and REST API both working on Linux 
 
 ## Session Continuity
 
-Last session: 2026-04-08T15:41:11.974Z
-Stopped at: Completed 05-03-PLAN.md — Phase 5 calcpad-ce-spike complete, user approved GO verdict
+Last session: 2026-04-08T17:07:29.100Z
+Stopped at: Completed 06-03-PLAN.md — upstream PR artifacts created
 Resume file: None
