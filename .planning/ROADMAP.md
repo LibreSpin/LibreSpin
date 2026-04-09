@@ -91,7 +91,7 @@
 
 **Requirements:** DIST-01, DIST-02, DIST-03, DIST-04, DIST-05, DIST-06, DIST-07, DIST-08, DIST-09, DIST-10, DIST-11, DIST-12
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 **Context captured:**
 - **Suppliers:** Nexar/Octopart (GraphQL, OAuth client credentials, free tier: 100 parts), DigiKey (OAuth client credentials, 10-min token), Mouser (API key), Arrow (login + API key), Newark/Farnell element14 (API key), LCSC (official API key or public wmsc endpoint)
@@ -102,7 +102,7 @@
 
 Plans:
 - [x] 999.3-01-PLAN.md — /librespin:setup skill (credential setup for 6 distributor APIs)
-- [ ] 999.3-02-PLAN.md — Concept Phase 4 enrichment block (live inventory + pricing via distributor APIs)
+- [x] 999.3-02-PLAN.md — Concept Phase 4 enrichment block (live inventory + pricing via distributor APIs)
 - [ ] 999.3-03-PLAN.md — Installer update (skills/setup/) + formal DIST requirements
 
 ## Progress
@@ -117,4 +117,4 @@ Plans:
 | 6. CalcPad CE Skill | v0.2 | 2/3 | In Progress|  |
 | 7. NGSpice Simulation Skill | v0.2 | 2/2 | Complete   | 2026-04-08 |
 | 8. Installer Update | v0.2 | 1/1 | Complete   | 2026-04-08 |
-| 999.3. Distributor API Integration | v0.3 | 1/3 | In Progress|  |
+| 999.3. Distributor API Integration | v0.3 | 2/3 | In Progress|  |
