@@ -94,7 +94,7 @@ Requirements for Milestone 3 (v0.3 — Distributor API Integration). Phase 999.3
 - [ ] **DIST-09**: Phase 4 falls back to existing WebFetch behavior when ~/.librespin/credentials is absent or all sections empty — no errors raised (D-13)
 - [ ] **DIST-10**: Any supplier API failure logs inline and continues; workflow never blocked by API errors (D-17)
 - [ ] **DIST-11**: Enrichment results appended to .librespin/04-bom/ BOM entries; downstream output contracts (07-final-output/, 08-calculations/) unchanged (D-14)
-- [ ] **DIST-12**: bin/install.js copies skills/setup/ alongside existing skills; npx librespin-install --uninstall removes skills/setup/ cleanly
+- [x] **DIST-12**: bin/install.js copies skills/setup/ alongside existing skills; npx librespin-install --uninstall removes skills/setup/ cleanly
 
 ## Future Requirements
 
@@ -181,7 +181,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DIST-09 | Phase 999.3 | Pending |
 | DIST-10 | Phase 999.3 | Pending |
 | DIST-11 | Phase 999.3 | Pending |
-| DIST-12 | Phase 999.3 | Pending |
+| DIST-12 | Phase 999.3 | Complete |
 
 **Coverage:**
 - v1 requirements: 26 total (Phases 1–4, all complete)
