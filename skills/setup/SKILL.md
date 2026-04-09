@@ -115,6 +115,51 @@ fi
 
 ---
 
+## Step 2.5: Write Secure Secret Entry Helper
+
+API secrets must never be pasted into the Claude Code chat — they appear in conversation history. This step writes a helper script that collects secrets in the user's own terminal using `read -s` (silent input), then writes directly to the credentials file without the value ever passing through chat.
+
+Run this bash block:
+
+```bash
+cat > "$HOME/.librespin/set-secret.sh" << 'SCRIPT'
+#!/bin/bash
+# LibreSpin secure credential entry — value never shown in terminal or chat
+# Usage: set-secret.sh SECTION KEY "Prompt label"
+section="$1" key="$2" label="${3:-Value}"
+IFS= read -r -s -p "$label: " LIBRESPIN_SECRET_VAL && echo
+export LIBRESPIN_SECRET_VAL
+python3 -c "
+import os, sys
+section = sys.argv[1]; key = sys.argv[2]
+val = os.environ.pop('LIBRESPIN_SECRET_VAL', '')
+fp = os.path.expanduser('~/.librespin/credentials')
+lines = open(fp).readlines()
+in_sec = False
+for i, l in enumerate(lines):
+    stripped = l.strip()
+    if stripped == f'[{section}]': in_sec = True
+    elif stripped.startswith('[') and stripped != f'[{section}]': in_sec = False
+    elif in_sec and l.startswith(f'{key} ='):
+        lines[i] = f'{key} = {val}\n'; in_sec = False
+open(fp, 'w').writelines(lines)
+print('Saved.')
+" "$section" "$key"
+unset LIBRESPIN_SECRET_VAL
+SCRIPT
+chmod +x "$HOME/.librespin/set-secret.sh"
+echo "HELPER_WRITTEN"
+```
+
+If result is `HELPER_WRITTEN`, tell user:
+
+```
+Secure entry ready. For each API secret, you'll be given a command to run in your
+own terminal — the value will not appear in this chat.
+```
+
+---
+
 ## Step 3: Define Credential Helper Functions
 
 Run this bash block to define helper functions used throughout the setup. Keep these in scope for all subsequent bash blocks in this session:
@@ -201,7 +246,7 @@ If `retry`: repeat from 4d. If `skip` or `force`: proceed accordingly.
 
 **About:** GraphQL API. OAuth 2.0 client credentials — provide client_id + client_secret, token is fetched automatically. Free tier: **100 matched parts total** (not per month — this counter does not reset). Parts used will be tracked in credentials file.
 
-**Credential prompts (AskUserQuestion):**
+**client_id — collect via AskUserQuestion:**
 
 ```
 "Nexar Client ID:
@@ -209,22 +254,33 @@ Obtain at: platform.nexar.com → My Apps → Create App
 Paste your client_id:"
 ```
 
-```
-"Nexar Client Secret:
-Paste your client_secret:"
+Write to credentials:
+```bash
+write_credential nexar client_id "$NEXAR_CLIENT_ID"
 ```
 
-**Show this notice before writing:**
+**client_secret — collect securely, NOT via AskUserQuestion:**
+
+Display this as plain text (not a question):
+```
+Run this in your terminal — the value will not appear in chat:
+  ~/.librespin/set-secret.sh nexar client_secret "Nexar Client Secret"
+```
+
+Then use AskUserQuestion:
+```
+"Nexar Client Secret — ready to continue?
+1. done — secret saved, run validation
+2. skip — leave Nexar unconfigured for now"
+```
+
+If 'skip': move to next supplier. If 'done': proceed to validation (reads secret from file).
+
+**Show this notice before validation:**
 ```
 NOTICE: Nexar free tier — 100 matched parts total lifetime limit. The skill
 tracks parts_used in your credentials file and warns when you approach the limit.
 After 100 matched parts, you will need a paid Nexar plan.
-```
-
-**Write to credentials:**
-```bash
-write_credential nexar client_id "$NEXAR_CLIENT_ID"
-write_credential nexar client_secret "$NEXAR_CLIENT_SECRET"
 ```
 
 **Token acquisition and validation:**
@@ -295,7 +351,7 @@ fi
 
 **About:** OAuth 2.0 client credentials. Token expires in ~10 minutes — the skill refreshes automatically before each use. Create a Production app (not sandbox) at developer.digikey.com for client credentials grant access.
 
-**Credential prompts (AskUserQuestion):**
+**client_id — collect via AskUserQuestion:**
 
 ```
 "DigiKey Client ID:
@@ -307,16 +363,27 @@ fi
 Paste your client_id:"
 ```
 
-```
-"DigiKey Client Secret:
-Paste your client_secret:"
-```
-
-**Write to credentials:**
+Write to credentials:
 ```bash
 write_credential digikey client_id "$DK_CLIENT_ID"
-write_credential digikey client_secret "$DK_CLIENT_SECRET"
 ```
+
+**client_secret — collect securely, NOT via AskUserQuestion:**
+
+Display this as plain text:
+```
+Run this in your terminal — the value will not appear in chat:
+  ~/.librespin/set-secret.sh digikey client_secret "DigiKey Client Secret"
+```
+
+Then use AskUserQuestion:
+```
+"DigiKey Client Secret — ready to continue?
+1. done — secret saved, run validation
+2. skip — leave DigiKey unconfigured for now"
+```
+
+If 'skip': move to next supplier. If 'done': proceed to validation.
 
 **Token acquisition and validation:**
 ```bash
@@ -370,19 +437,26 @@ write_credential digikey token_expires "$DK_EXPIRY"
 
 **About:** Simple API key — no OAuth needed. The search API key is separate from the order API key. Register at mouser.com and request the **Search API** key from the developer portal. Rate limit: 1000 requests/day.
 
-**Credential prompts (AskUserQuestion):**
+**part_api_key — collect securely, NOT via AskUserQuestion:**
 
+Display this as plain text:
 ```
-"Mouser Search API Key:
+Mouser Search API Key:
 1. Go to mouser.com → Account → API Keys (or mouser.com/api)
 2. Generate a Search API key (NOT the Order API key — they are separate)
-Paste your part_api_key:"
+
+Then run this in your terminal — the value will not appear in chat:
+  ~/.librespin/set-secret.sh mouser part_api_key "Mouser Search API Key"
 ```
 
-**Write to credentials:**
-```bash
-write_credential mouser part_api_key "$MOUSER_KEY"
+Then use AskUserQuestion:
 ```
+"Mouser API Key — ready to continue?
+1. done — key saved, run validation
+2. skip — leave Mouser unconfigured for now"
+```
+
+If 'skip': move to next supplier. If 'done': proceed to validation.
 
 **Validation:**
 ```bash
@@ -409,7 +483,7 @@ fi
 
 **About:** API key auth with both account login (email) and API key required. Arrow API access requires contacting api@arrow.com or submitting a request at developers.arrow.com. This is not instant — it may take several business days.
 
-**Credential prompts (AskUserQuestion):**
+**login — collect via AskUserQuestion** (account email, not a secret):
 
 ```
 "Arrow API Login (your Arrow account email):
@@ -419,16 +493,27 @@ If you do not have API access, visit developers.arrow.com to request it
 Paste your Arrow account email:"
 ```
 
-```
-"Arrow API Key:
-Paste your api_key:"
-```
-
-**Write to credentials:**
+Write to credentials:
 ```bash
 write_credential arrow login "$ARROW_LOGIN"
-write_credential arrow api_key "$ARROW_API_KEY"
 ```
+
+**api_key — collect securely, NOT via AskUserQuestion:**
+
+Display this as plain text:
+```
+Run this in your terminal — the value will not appear in chat:
+  ~/.librespin/set-secret.sh arrow api_key "Arrow API Key"
+```
+
+Then use AskUserQuestion:
+```
+"Arrow API Key — ready to continue?
+1. done — key saved, run validation
+2. skip — leave Arrow unconfigured for now"
+```
+
+If 'skip': move to next supplier. If 'done': proceed to validation.
 
 **Validation:**
 ```bash
@@ -452,15 +537,29 @@ fi
 
 **About:** One element14 API key covers Newark (US), Farnell (UK/EU), and element14 (Asia). Register at partner.element14.com — self-service, no enterprise agreement required for Product Search API. Select the storefront that matches your region.
 
-**Credential prompts (AskUserQuestion):**
+**api_key — collect securely, NOT via AskUserQuestion:**
 
+Display this as plain text:
 ```
-"element14 / Newark / Farnell API Key:
+element14 / Newark / Farnell API Key:
 1. Go to partner.element14.com
 2. Register and apply for Product Search API access
 3. Copy your API key once approved
-Paste your api_key:"
+
+Then run this in your terminal — the value will not appear in chat:
+  ~/.librespin/set-secret.sh newark api_key "Newark/element14 API Key"
 ```
+
+Then use AskUserQuestion:
+```
+"Newark/element14 API Key — ready to continue?
+1. done — key saved
+2. skip — leave Newark unconfigured for now"
+```
+
+If 'skip': move to next supplier.
+
+**storefront — collect via AskUserQuestion** (not a secret):
 
 ```
 "element14 Storefront (press Enter for default: us.newark.com):
@@ -473,9 +572,8 @@ Enter storefront or press Enter for us.newark.com:"
 
 If user presses Enter or provides empty input, use `us.newark.com`.
 
-**Write to credentials:**
+Write to credentials:
 ```bash
-write_credential newark api_key "$NEWARK_KEY"
 write_credential newark storefront "$NEWARK_STOREFRONT"
 ```
 
@@ -532,15 +630,25 @@ Enter 'A' for official API, 'B' for public endpoint, or 'skip' to skip LCSC:"
 
 **If Mode A (Official API):**
 
+Display this as plain text (NOT AskUserQuestion):
 ```
-"LCSC API Key:
-Apply at lcsc.com/docs/openapi — requires an LCSC account.
-Paste your api_key:"
+LCSC API Key — apply at lcsc.com/docs/openapi (requires an LCSC account).
+
+Run this in your terminal — the value will not appear in chat:
+  ~/.librespin/set-secret.sh lcsc api_key "LCSC API Key"
 ```
 
-Write to credentials:
+Then use AskUserQuestion:
+```
+"LCSC API Key — ready to continue?
+1. done — key saved, run validation
+2. skip — leave LCSC unconfigured for now"
+```
+
+If 'skip': move on. If 'done': proceed to validation.
+
+Write mode flag to credentials:
 ```bash
-write_credential lcsc api_key "$LCSC_API_KEY"
 write_credential lcsc use_public_endpoint false
 ```
 
