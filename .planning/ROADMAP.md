@@ -29,7 +29,7 @@
 - [ ] 999.1: Auto-chain phases in librespin-concept (eliminate re-invoke between phases)
 - [ ] 999.2: Split SKILL.md into per-phase files (reduce 239KB context pressure)
 - [ ] 999.4: CalcPad batch mode — add --all flag: auto-run all circuit blocks sequentially, single final review before simulation (no per-block gates)
-- [ ] 999.5: Calculation library — save completed .cpd sheets to ~/.librespin/library/ with a catalog index; future runs search for similar circuits (by type + key params) and offer the closest match as a baseline to avoid regenerating from scratch
+- [ ] 999.5: Calculation library — save final-approved .cpd sheets to ~/.librespin/library/; catalog.md is one row per circuit type (not per file) so it stays permanently small; new approved sheet for an existing type overwrites the row and file in-place; skill reads catalog at Phase start, offers closest type+param match as baseline to skip worksheet generation; token savings compound across projects
 
 ## Phase Details
 
