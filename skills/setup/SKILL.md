@@ -358,7 +358,7 @@ fi
 1. Go to developer.digikey.com
 2. Sign in → My Apps → Create App
 3. Select 'Production' environment
-4. Enable 'Product Information' and 'Order Support' APIs
+4. Enable 'Product Information' API (LibreSpin only reads pricing and stock — no ordering)
 5. Copy the Client ID:
 Paste your client_id:"
 ```
