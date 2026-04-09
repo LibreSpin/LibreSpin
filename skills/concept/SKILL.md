@@ -4531,6 +4531,276 @@ const updatedState = existingState.replace(/^phase: .+$/m, `phase: '4-component-
 fs.writeFileSync('.librespin/state.md', updatedState);
 ```
 
+### DISTRIBUTOR ENRICHMENT (Phase 4 — additive, after MPN selection)
+
+After BOM files are written to `.librespin/04-bom/`, enrich each selected component with real-time inventory and pricing from configured distributor APIs.
+
+**Trigger condition:** Only runs if `~/.librespin/credentials` exists. If absent, skip enrichment silently and continue. This preserves existing Phase 4 behavior for users without API keys (D-13).
+
+**Enrichment execution:**
+
+```bash
+# --- Distributor Enrichment Block ---
+CREDS_FILE="$HOME/.librespin/credentials"
+
+if [ ! -f "$CREDS_FILE" ]; then
+  echo "[Distributor Enrichment] No credentials file found — skipping (run /librespin:setup to configure)"
+  exit 0
+fi
+
+# Check jq availability
+if ! command -v jq > /dev/null 2>&1; then
+  echo "[Distributor Enrichment] WARNING: jq not found. Install: sudo apt install jq"
+  echo "[Distributor Enrichment] Skipping enrichment — jq required for API response parsing"
+  exit 0
+fi
+
+# Helper functions
+read_credential() {
+  local section="$1" key="$2"
+  grep -A50 "^\[$section\]" "$CREDS_FILE" | grep -m1 "^$key" | awk -F' = ' '{print $2}' | tr -d '\r\n'
+}
+
+write_credential() {
+  local section="$1" key="$2" value="$3"
+  sed -i "/^\[$section\]/,/^\[/{s|^$key = .*|$key = $value|}" "$CREDS_FILE"
+}
+
+is_token_expired() {
+  local expires="$1"
+  [ -z "$expires" ] && return 0  # empty expiry = treat as expired
+  local now
+  now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  [[ "$now" > "$expires" ]]
+}
+
+# Enrichment result accumulator
+# For each component MPN passed by Phase 4 logic, run this block:
+# MPN variable: $COMPONENT_MPN (set by calling context per component)
+enrich_component() {
+  local MPN="$1"
+  local enrichment="## Distributor Enrichment: $MPN\n"
+  enrichment+="| Supplier | Stock | Unit Price (USD) | Lifecycle | MOQ |\n"
+  enrichment+="| --- | --- | --- | --- | --- |\n"
+  local any_result=false
+
+  # --- Nexar ---
+  local NEXAR_CLIENT_ID NEXAR_CLIENT_SECRET NEXAR_TOKEN NEXAR_EXPIRY NEXAR_PARTS_USED
+  NEXAR_CLIENT_ID=$(read_credential nexar client_id)
+  NEXAR_CLIENT_SECRET=$(read_credential nexar client_secret)
+  NEXAR_TOKEN=$(read_credential nexar access_token)
+  NEXAR_EXPIRY=$(read_credential nexar token_expires)
+  NEXAR_PARTS_USED=$(read_credential nexar parts_used)
+  NEXAR_PARTS_USED=${NEXAR_PARTS_USED:-0}
+
+  if [ -n "$NEXAR_CLIENT_ID" ] && [ -n "$NEXAR_CLIENT_SECRET" ]; then
+    # Check free tier quota
+    if [ "$NEXAR_PARTS_USED" -ge 100 ] 2>/dev/null; then
+      echo "[Nexar] Free tier exhausted (100/100 parts used). Upgrade at nexar.com or configure another supplier."
+      enrichment+="| Nexar | Quota exhausted (100/100) | — | — | — |\n"
+    else
+      # Refresh token if expired
+      if is_token_expired "$NEXAR_EXPIRY"; then
+        echo "[Nexar] Token expired — refreshing..."
+        local NR
+        NR=$(curl -s --request POST 'https://identity.nexar.com/connect/token' \
+          --header 'Content-Type: application/x-www-form-urlencoded' \
+          --data-urlencode 'grant_type=client_credentials' \
+          --data-urlencode "client_id=$NEXAR_CLIENT_ID" \
+          --data-urlencode "client_secret=$NEXAR_CLIENT_SECRET" \
+          --data-urlencode 'scope=supply.domain')
+        NEXAR_TOKEN=$(echo "$NR" | jq -r '.access_token // empty')
+        if [ -n "$NEXAR_TOKEN" ]; then
+          NEXAR_EXPIRY=$(date -u -d "+23 hours" +%Y-%m-%dT%H:%M:%SZ)
+          write_credential nexar access_token "$NEXAR_TOKEN"
+          write_credential nexar token_expires "$NEXAR_EXPIRY"
+        else
+          echo "[Nexar] Token refresh failed — skipping"
+        fi
+      fi
+
+      if [ -n "$NEXAR_TOKEN" ]; then
+        local NEXAR_RESULT
+        NEXAR_RESULT=$(curl -s -X POST 'https://api.nexar.com/graphql/' \
+          -H "Authorization: Bearer $NEXAR_TOKEN" \
+          -H 'Content-Type: application/json' \
+          -d "{\"query\": \"query { supSearchMpn(q: \\\"$MPN\\\", limit: 1) { results { part { mpn manufacturer { name } specs(attribute: \\\"lifecyclestatus\\\") { displayValue } sellers(authorizedOnly: true) { company { name } offers { inventoryLevel moq prices { quantity price currency } } } } } } }\"}")
+        if echo "$NEXAR_RESULT" | jq -e '.errors' > /dev/null 2>&1; then
+          echo "[Nexar] API error for $MPN — skipping"
+        else
+          local NX_STOCK NX_PRICE NX_LIFECYCLE NX_MOQ
+          NX_STOCK=$(echo "$NEXAR_RESULT" | jq -r '.data.supSearchMpn.results[0].part.sellers[0].offers[0].inventoryLevel // "unknown"')
+          NX_PRICE=$(echo "$NEXAR_RESULT" | jq -r '.data.supSearchMpn.results[0].part.sellers[0].offers[0].prices[0].price // "unknown"')
+          NX_LIFECYCLE=$(echo "$NEXAR_RESULT" | jq -r '.data.supSearchMpn.results[0].part.specs[0].displayValue // "unknown"')
+          NX_MOQ=$(echo "$NEXAR_RESULT" | jq -r '.data.supSearchMpn.results[0].part.sellers[0].offers[0].moq // "unknown"')
+          enrichment+="| Nexar | $NX_STOCK | $NX_PRICE | $NX_LIFECYCLE | $NX_MOQ |\n"
+          any_result=true
+          # Increment parts_used
+          NEXAR_PARTS_USED=$((NEXAR_PARTS_USED + 1))
+          write_credential nexar parts_used "$NEXAR_PARTS_USED"
+          # Warn at 80 parts used
+          if [ "$NEXAR_PARTS_USED" -ge 80 ] && [ "$NEXAR_PARTS_USED" -lt 100 ]; then
+            echo "[Nexar] WARNING: Free tier usage: $NEXAR_PARTS_USED/100 parts. Approaching limit."
+          fi
+        fi
+      fi
+    fi
+  fi
+
+  # --- DigiKey ---
+  local DK_CLIENT_ID DK_CLIENT_SECRET DK_TOKEN DK_EXPIRY
+  DK_CLIENT_ID=$(read_credential digikey client_id)
+  DK_CLIENT_SECRET=$(read_credential digikey client_secret)
+  DK_TOKEN=$(read_credential digikey access_token)
+  DK_EXPIRY=$(read_credential digikey token_expires)
+
+  if [ -n "$DK_CLIENT_ID" ] && [ -n "$DK_CLIENT_SECRET" ]; then
+    # DigiKey token expires in 10 minutes — always check before use
+    if is_token_expired "$DK_EXPIRY"; then
+      echo "[DigiKey] Token expired — refreshing..."
+      local DKR
+      DKR=$(curl -s -X POST 'https://api.digikey.com/v1/oauth2/token' \
+        -H 'Content-Type: application/x-www-form-urlencoded' \
+        -d "client_id=$DK_CLIENT_ID&client_secret=$DK_CLIENT_SECRET&grant_type=client_credentials")
+      DK_TOKEN=$(echo "$DKR" | jq -r '.access_token // empty')
+      if [ -n "$DK_TOKEN" ]; then
+        # 9-minute window (599s - 60s buffer)
+        local DK_NEW_EXPIRY
+        DK_NEW_EXPIRY=$(date -u -d "+9 minutes" +%Y-%m-%dT%H:%M:%SZ)
+        write_credential digikey access_token "$DK_TOKEN"
+        write_credential digikey token_expires "$DK_NEW_EXPIRY"
+      else
+        echo "[DigiKey] Token refresh failed — skipping"
+      fi
+    fi
+
+    if [ -n "$DK_TOKEN" ]; then
+      local DK_RESULT DK_STOCK DK_PRICE DK_LIFECYCLE
+      # CRITICAL: Both Authorization AND X-DIGIKEY-Client-Id headers are required
+      DK_RESULT=$(curl -s -X GET "https://api.digikey.com/products/v4/search/$MPN/productdetails" \
+        -H "Authorization: Bearer $DK_TOKEN" \
+        -H "X-DIGIKEY-Client-Id: $DK_CLIENT_ID" \
+        -H "X-DIGIKEY-Locale-Site: US" \
+        -H "X-DIGIKEY-Locale-Language: en" \
+        -H "X-DIGIKEY-Locale-Currency: USD")
+      DK_STOCK=$(echo "$DK_RESULT" | jq -r '.Product.QuantityAvailable // "unknown"')
+      DK_PRICE=$(echo "$DK_RESULT" | jq -r '.Product.UnitPrice // "unknown"')
+      DK_LIFECYCLE=$(echo "$DK_RESULT" | jq -r '.Product.ProductStatus.Status // "unknown"')
+      if [ "$DK_STOCK" = "null" ] || echo "$DK_RESULT" | jq -e '.httpStatusCode' > /dev/null 2>&1; then
+        echo "[DigiKey] API error for $MPN — logging and continuing"
+        enrichment+="| DigiKey | Error — see log | — | — | — |\n"
+      else
+        enrichment+="| DigiKey | $DK_STOCK | $DK_PRICE | $DK_LIFECYCLE | — |\n"
+        any_result=true
+      fi
+    fi
+  fi
+
+  # --- Mouser ---
+  local MOUSER_KEY
+  MOUSER_KEY=$(read_credential mouser part_api_key)
+  if [ -n "$MOUSER_KEY" ]; then
+    local MOUSER_RESULT MOUSER_STOCK MOUSER_PRICE
+    MOUSER_RESULT=$(curl -s -X POST "https://api.mouser.com/api/v1/search/partnumber?apiKey=$MOUSER_KEY" \
+      -H 'Content-Type: application/json' \
+      -d "{\"SearchByPartRequest\": {\"mouserPartNumber\": \"$MPN\", \"partSearchOptions\": \"\"}}")
+    MOUSER_STOCK=$(echo "$MOUSER_RESULT" | jq -r '.SearchResults.Parts[0].Availability // "unknown"')
+    MOUSER_PRICE=$(echo "$MOUSER_RESULT" | jq -r '.SearchResults.Parts[0].PriceBreaks[0].Price // "unknown"')
+    if [ "$MOUSER_STOCK" = "null" ] || [ -z "$MOUSER_STOCK" ]; then
+      echo "[Mouser] No result for $MPN — logging and continuing"
+    else
+      enrichment+="| Mouser | $MOUSER_STOCK | $MOUSER_PRICE | — | — |\n"
+      any_result=true
+    fi
+  fi
+
+  # --- Arrow ---
+  local ARROW_LOGIN ARROW_KEY
+  ARROW_LOGIN=$(read_credential arrow login)
+  ARROW_KEY=$(read_credential arrow api_key)
+  if [ -n "$ARROW_LOGIN" ] && [ -n "$ARROW_KEY" ]; then
+    local ARROW_RESULT
+    ARROW_RESULT=$(curl -s "https://api.arrow.com/itemservice/v4/en/search?term=$MPN&login=$ARROW_LOGIN&apikey=$ARROW_KEY")
+    local ARROW_STOCK
+    ARROW_STOCK=$(echo "$ARROW_RESULT" | jq -r '.itemserviceresult.data[0].InvOrg.sources[0].Quantity // "unknown"' 2>/dev/null || echo "unknown")
+    if [ "$ARROW_STOCK" = "unknown" ] || [ "$ARROW_STOCK" = "null" ]; then
+      echo "[Arrow] No result or error for $MPN — logging and continuing"
+    else
+      enrichment+="| Arrow | $ARROW_STOCK | — | — | — |\n"
+      any_result=true
+    fi
+  fi
+
+  # --- Newark/Farnell ---
+  local NEWARK_KEY NEWARK_STOREFRONT
+  NEWARK_KEY=$(read_credential newark api_key)
+  NEWARK_STOREFRONT=$(read_credential newark storefront)
+  NEWARK_STOREFRONT=${NEWARK_STOREFRONT:-us.newark.com}
+  if [ -n "$NEWARK_KEY" ]; then
+    local NEWARK_RESULT NEWARK_STOCK
+    NEWARK_RESULT=$(curl -s \
+      "https://api.element14.com/catalog/sandboxed/products;keywordList=$MPN;storeInfo.id=$NEWARK_STOREFRONT/v1/xml-data/productDetails/manufacturer?apikey=$NEWARK_KEY" \
+      -H 'Accept: application/json')
+    NEWARK_STOCK=$(echo "$NEWARK_RESULT" | jq -r '.manufacturerProductDetailResponse.products.product[0].inv // "unknown"' 2>/dev/null || echo "unknown")
+    if [ "$NEWARK_STOCK" = "null" ] || [ "$NEWARK_STOCK" = "unknown" ]; then
+      echo "[Newark] No result for $MPN — logging and continuing"
+    else
+      enrichment+="| Newark/Farnell | $NEWARK_STOCK | — | — | — |\n"
+      any_result=true
+    fi
+  fi
+
+  # --- LCSC ---
+  local LCSC_KEY LCSC_PUBLIC
+  LCSC_KEY=$(read_credential lcsc api_key)
+  LCSC_PUBLIC=$(read_credential lcsc use_public_endpoint)
+  if [ -n "$LCSC_KEY" ]; then
+    local LCSC_RESULT LCSC_STOCK
+    LCSC_RESULT=$(curl -s -H "Authorization: $LCSC_KEY" "https://lcsc.com/api/search?q=$MPN")
+    LCSC_STOCK=$(echo "$LCSC_RESULT" | jq -r '.data.productList[0].stockCount // "unknown"' 2>/dev/null || echo "unknown")
+    if [ "$LCSC_STOCK" = "null" ] || [ "$LCSC_STOCK" = "unknown" ]; then
+      echo "[LCSC] Official API: no result for $MPN"
+    else
+      enrichment+="| LCSC | $LCSC_STOCK | — | — | — |\n"
+      any_result=true
+    fi
+  elif [ "$LCSC_PUBLIC" = "true" ]; then
+    # Public wmsc endpoint — note: unofficial, may change without notice
+    local LCSC_PUB_RESULT LCSC_PUB_STOCK
+    LCSC_PUB_RESULT=$(curl -s "https://wmsc.lcsc.com/wmsc/search/global?keyword=$MPN&currentPage=1&pageSize=5")
+    LCSC_PUB_STOCK=$(echo "$LCSC_PUB_RESULT" | jq -r '.result.data[0].stockCount // "unknown"' 2>/dev/null || echo "unknown")
+    if [ "$LCSC_PUB_STOCK" = "null" ] || [ "$LCSC_PUB_STOCK" = "unknown" ]; then
+      echo "[LCSC] Public endpoint: no result for $MPN"
+    else
+      enrichment+="| LCSC (public) | $LCSC_PUB_STOCK | — | — | — |\n"
+      any_result=true
+    fi
+  fi
+
+  # Output enrichment if any supplier returned data
+  if $any_result; then
+    echo -e "$enrichment"
+  else
+    echo "[Distributor Enrichment] No supplier data for $MPN — check credentials or try /librespin:setup"
+  fi
+}
+```
+
+**Integration with Phase 4 BOM writing:**
+
+After each BOM file is written to `.librespin/04-bom/bom-{conceptSlug}.md`, append the enrichment block for each component in that BOM. For each component with a non-generic MPN (i.e., MPN is not "Generic" and not empty):
+
+```
+For each selected component with MPN:
+  1. Call: enrich_component "$MPN"
+  2. Append the returned enrichment table to the component's entry in .librespin/04-bom/bom-{conceptSlug}.md
+  3. Continue regardless of enrichment success/failure (D-17)
+```
+
+**Fallback behavior (D-13):** If credentials file does not exist, the bash check at the top of the enrichment block exits early with a log message. Phase 4 continues to its normal completion. No errors are raised.
+
+**Output contract preservation (D-14):** Enrichment data is appended to `.librespin/04-bom/` files only. The output contract for downstream phases (CalcPad reads `.librespin/07-final-output/`, NGSpice reads `.librespin/08-calculations/`) is unaffected.
+
 ## PHASE 5: CONCEPT GENERATION
 
 Generate component-level ASCII block diagrams and specification gap analysis for validated concepts.
