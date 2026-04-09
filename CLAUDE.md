@@ -283,8 +283,8 @@ Claude Code will resolve `"source": "../.."` relative to `local-marketplace/.cla
 
 ```bash
 # Bump patch version in .claude-plugin/plugin.json, then:
-/plugin uninstall librespin
-/plugin install librespin
+# Exit and restart Claude Code — new version is picked up on restart.
+# (No uninstall needed for local marketplace; restart suffices.)
 ```
 
 Failure to bump → skills silently missing. This has caused issues twice.
