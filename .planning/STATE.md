@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
-status: verifying
-stopped_at: Completed 08-01-PLAN.md — installer updated for calcpad and simulate skills
-last_updated: "2026-04-08T21:18:53.529Z"
-last_activity: 2026-04-08
+status: executing
+stopped_at: Completed 999.3-01-PLAN.md — setup skill for 6 distributor APIs
+last_updated: "2026-04-09T01:01:23.729Z"
+last_activity: 2026-04-09
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 4
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 12
+  completed_plans: 10
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-08)
 
 **Core value:** A minimal, lightweight harness that makes Claude Code an expert hardware design assistant — the intelligence lives in the prompts, not in code.
-**Current focus:** Phase 08 — installer-update
+**Current focus:** Phase 999.3 — distributor-api-integration-octopart-nexar-digikey-mouser-arrow-lcsc
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-08
+Phase: 999.3 (distributor-api-integration-octopart-nexar-digikey-mouser-arrow-lcsc) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-04-09
 
 Progress: [----------] 0% (0/4 phases)
 
@@ -85,6 +85,9 @@ v0.2 roadmap decisions:
 - [Phase 07-ngspice-simulation-skill]: agents/simulate.md requires no changes: all documented error substrings and wrdata parse logic confirmed accurate against NGSpice 42 on Ubuntu noble
 - [Phase 07-ngspice-simulation-skill]: Floating-node circuit does NOT trigger singular matrix in NGSpice 42; only true topological singularity (parallel voltage sources) triggers ERR-2
 - [Phase 08]: Templates source path corrected from skills/librespin-concept/templates to skills/concept/templates
+- [Phase 999.3]: Mouser uses simple API key (not OAuth) — D-04 assumption corrected by research before implementation
+- [Phase 999.3]: LCSC dual-mode: official OpenAPI (api_key) or public wmsc.lcsc.com endpoint as first-class choices
+- [Phase 999.3]: DigiKey X-DIGIKEY-Client-Id header required on all API requests — critical auth requirement
 
 ### Roadmap Evolution
 
@@ -100,6 +103,6 @@ None. Phase 5 spike resolved: CalcPad CE CLI and REST API both working on Linux 
 
 ## Session Continuity
 
-Last session: 2026-04-08T21:17:20.949Z
-Stopped at: Completed 08-01-PLAN.md — installer updated for calcpad and simulate skills
+Last session: 2026-04-09T01:01:23.725Z
+Stopped at: Completed 999.3-01-PLAN.md — setup skill for 6 distributor APIs
 Resume file: None
