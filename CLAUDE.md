@@ -279,6 +279,16 @@ Claude Code will resolve `"source": "../.."` relative to `local-marketplace/.cla
 
 **Why not edit `.claude-plugin/marketplace.json` directly?** That file points to the GitHub URL for production use. Editing it risks accidentally pushing a local path to GitHub. The gitignored `local-marketplace/` keeps the two concerns separate.
 
+**CRITICAL — bump version after every skill change:** Claude Code caches plugins by version. If you add, rename, or remove a skill without bumping `.claude-plugin/plugin.json` version, the next `/plugin install` will serve the stale cache and the skill will not appear. After any change to `skills/`:
+
+```bash
+# Bump patch version in .claude-plugin/plugin.json, then:
+/plugin uninstall librespin
+/plugin install librespin
+```
+
+Failure to bump → skills silently missing. This has caused issues twice.
+
 <!-- GSD:workflow-start source:GSD defaults -->
 ## GSD Workflow Enforcement
 
