@@ -404,19 +404,21 @@ else
   # Expiry: 9 minutes from now (10-minute lifetime with 1-minute buffer)
   DK_EXPIRY=$(date -u -d "+9 minutes" +%Y-%m-%dT%H:%M:%SZ)
 
-  # Validation test — X-DIGIKEY-Client-Id header is REQUIRED on all API requests
-  DK_TEST=$(curl -s -X GET "https://api.digikey.com/products/v4/search/LM358/productdetails" \
+  # Validation test — POST keyword search (V4). X-DIGIKEY-Client-Id is REQUIRED.
+  DK_TEST=$(curl -s -X POST "https://api.digikey.com/products/v4/search/keyword" \
     -H "Authorization: Bearer $DK_TOKEN" \
     -H "X-DIGIKEY-Client-Id: $DK_CLIENT_ID" \
     -H "X-DIGIKEY-Locale-Site: US" \
     -H "X-DIGIKEY-Locale-Language: en" \
-    -H "X-DIGIKEY-Locale-Currency: USD")
+    -H "X-DIGIKEY-Locale-Currency: USD" \
+    -H "Content-Type: application/json" \
+    -d '{"Keywords": "LM358", "Limit": 1}')
 
-  DK_VALID=$(echo "$DK_TEST" | jq -r 'if .Product then "yes" else "no" end' 2>/dev/null || echo "no")
+  DK_COUNT=$(echo "$DK_TEST" | jq -r '.Products | length' 2>/dev/null || echo "0")
   DK_TEST_ERROR=$(echo "$DK_TEST" | jq -r '.ErrorMessage // .error // empty' 2>/dev/null || echo "")
 
-  if [ "$DK_VALID" = "yes" ]; then
-    echo "VALID"
+  if [ "${DK_COUNT:-0}" -gt 0 ] 2>/dev/null; then
+    echo "VALID: products=$DK_COUNT"
   else
     echo "INVALID: ${DK_TEST_ERROR:-unexpected response format}"
   fi
