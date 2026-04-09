@@ -51,12 +51,19 @@ else
 fi
 ```
 
-**If result contains `JQ_MISSING`:** Show the following warning:
+**If result contains `JQ_MISSING`:** Show the following error and **stop**:
 
 ```
-jq not found — install with: sudo apt install jq
-jq is required for API response parsing. Setup will continue but validation
-results may be unreliable without it.
+ERROR: jq is required but not installed.
+
+All distributor APIs return JSON. Without jq, credential validation cannot
+parse any API responses — setup cannot verify that your credentials work.
+
+Install jq first, then re-run /librespin:setup:
+
+  sudo apt install jq        # Debian / Ubuntu
+  brew install jq            # macOS
+  winget install jqlang.jq   # Windows
 ```
 
 Then run this bash block to create or confirm the credentials file:
