@@ -77,6 +77,25 @@ Requirements for Milestone 2 (v0.2 — CalcPad & NGSpice). Phases 5–8.
 
 - [x] **PKG-07**: `bin/install.js` copies calcpad and simulate skill files alongside the concept skill
 
+## v0.3 Requirements
+
+Requirements for Milestone 3 (v0.3 — Distributor API Integration). Phase 999.3.
+
+### Distributor API Integration
+
+- [ ] **DIST-01**: /librespin:setup skill walks user through credential entry for Nexar, DigiKey, Mouser, Arrow, Newark/Farnell, and LCSC — each supplier is optional and can be skipped
+- [ ] **DIST-02**: Nexar OAuth 2.0 client credentials implemented via curl; free tier quota (100 parts) tracked in credentials file; user warned at 80 parts and blocked at 100 with clear message
+- [ ] **DIST-03**: DigiKey OAuth 2.0 client credentials implemented via curl; token auto-refreshed before each API call (10-minute lifetime); X-DIGIKEY-Client-Id header included on all requests
+- [ ] **DIST-04**: Mouser API key auth implemented; part_api_key stored in [mouser] credentials section; POST endpoint used for part search
+- [ ] **DIST-05**: Arrow API key auth implemented; both login (email) and api_key stored in [arrow] section; both required as URI params
+- [ ] **DIST-06**: Newark/Farnell element14 API key auth implemented; storefront selectable (us.newark.com default); LCSC supports official API key or public wmsc endpoint fallback
+- [ ] **DIST-07**: Credentials stored in INI format at ~/.librespin/credentials; OAuth tokens cached with expiry timestamps; setup validates each API with LM358 test call before saving
+- [ ] **DIST-08**: Concept skill Phase 4 enrichment fires automatically after MPN selection when credentials file is present; queries all configured suppliers per MPN
+- [ ] **DIST-09**: Phase 4 falls back to existing WebFetch behavior when ~/.librespin/credentials is absent or all sections empty — no errors raised (D-13)
+- [ ] **DIST-10**: Any supplier API failure logs inline and continues; workflow never blocked by API errors (D-17)
+- [ ] **DIST-11**: Enrichment results appended to .librespin/04-bom/ BOM entries; downstream output contracts (07-final-output/, 08-calculations/) unchanged (D-14)
+- [ ] **DIST-12**: bin/install.js copies skills/setup/ alongside existing skills; npx librespin-install --uninstall removes skills/setup/ cleanly
+
 ## Future Requirements
 
 Deferred to future milestones. Tracked but not in current roadmap.
@@ -151,11 +170,24 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SIM-09 | Phase 7 | Complete |
 | SIM-10 | Phase 7 | Complete |
 | PKG-07 | Phase 8 | Complete |
+| DIST-01 | Phase 999.3 | Pending |
+| DIST-02 | Phase 999.3 | Pending |
+| DIST-03 | Phase 999.3 | Pending |
+| DIST-04 | Phase 999.3 | Pending |
+| DIST-05 | Phase 999.3 | Pending |
+| DIST-06 | Phase 999.3 | Pending |
+| DIST-07 | Phase 999.3 | Pending |
+| DIST-08 | Phase 999.3 | Pending |
+| DIST-09 | Phase 999.3 | Pending |
+| DIST-10 | Phase 999.3 | Pending |
+| DIST-11 | Phase 999.3 | Pending |
+| DIST-12 | Phase 999.3 | Pending |
 
 **Coverage:**
 - v1 requirements: 26 total (Phases 1–4, all complete)
 - v0.2 requirements: 19 total (Phases 5–8)
-- Mapped to phases: 45
+- v0.3 requirements: 12 total (Phase 999.3)
+- Mapped to phases: 57
 - Unmapped: 0
 
 ---
