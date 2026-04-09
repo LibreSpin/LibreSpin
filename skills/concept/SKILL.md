@@ -3070,6 +3070,33 @@ if (passed.length > 0 || borderline.length > 0) {
 
 Select specific parts with part numbers for validated architecture concepts (those passing Phase 1 >=80% threshold). Research focuses on active lifecycle status, availability, and verified specifications. Only validated concepts receive component research - prevents wasting effort on unfeasible architectures.
 
+### API-FIRST RULE (MANDATORY — run this before any component research)
+
+```bash
+CREDS_FILE="$HOME/.librespin/credentials"
+HAS_DIGIKEY=0; HAS_NEXAR=0; HAS_MOUSER=0
+
+if [ -f "$CREDS_FILE" ] && command -v jq > /dev/null 2>&1; then
+  HAS_DIGIKEY=$(grep -A5 '^\[digikey\]' "$CREDS_FILE" | grep -c 'client_id = .')
+  HAS_NEXAR=$(grep -A5 '^\[nexar\]' "$CREDS_FILE" | grep -c 'client_id = .')
+  HAS_MOUSER=$(grep -A5 '^\[mouser\]' "$CREDS_FILE" | grep -c 'part_api_key = .')
+fi
+
+if [ $((HAS_DIGIKEY + HAS_NEXAR + HAS_MOUSER)) -gt 0 ]; then
+  echo "[Phase 4] Distributor APIs configured — using APIs as primary source for pricing/stock/lifecycle."
+  echo "[Phase 4] WebSearch/WebFetch MAY only be used for: parts not found in any API, datasheets, or suppliers not covered by configured APIs."
+  API_MODE=true
+else
+  echo "[Phase 4] No distributor APIs configured. Using web search with estimated pricing."
+  echo "[Phase 4] Run /librespin:setup to configure APIs for accurate pricing and live stock data."
+  API_MODE=false
+fi
+```
+
+**If `API_MODE=true`:** For every component with a non-generic MPN, call `enrich_component "$MPN"` (defined in the DISTRIBUTOR ENRICHMENT section below) DURING the research loop — before scoring and before writing the BOM entry. Use the returned API data as the primary source for price, stock, and lifecycle in the balanced scorecard. Do NOT use WebSearch to obtain pricing or stock for any part where an API returned data.
+
+**If `API_MODE=false`:** Use WebSearch/WebFetch as normal. Mark all prices as `est.` in BOM output (e.g. `est. $1.36`). Log: `[Phase 4] Price from web search — configure /librespin:setup for verified pricing.` on each BOM line.
+
 ### OVERVIEW
 
 **Purpose:** Transform functional block diagrams from Phase 2 into concrete component selections with verified availability, lifecycle status, and pricing. Apply balanced scorecard for objective part evaluation.
@@ -4676,21 +4703,24 @@ enrich_component() {
 
     if [ -n "$DK_TOKEN" ]; then
       local DK_RESULT DK_STOCK DK_PRICE DK_LIFECYCLE
-      # CRITICAL: Both Authorization AND X-DIGIKEY-Client-Id headers are required
-      DK_RESULT=$(curl -s -X GET "https://api.digikey.com/products/v4/search/$MPN/productdetails" \
+      # CRITICAL: POST keyword search (V4). Both Authorization AND X-DIGIKEY-Client-Id required.
+      DK_RESULT=$(curl -s -X POST "https://api.digikey.com/products/v4/search/keyword" \
         -H "Authorization: Bearer $DK_TOKEN" \
         -H "X-DIGIKEY-Client-Id: $DK_CLIENT_ID" \
         -H "X-DIGIKEY-Locale-Site: US" \
         -H "X-DIGIKEY-Locale-Language: en" \
-        -H "X-DIGIKEY-Locale-Currency: USD")
-      DK_STOCK=$(echo "$DK_RESULT" | jq -r '.Product.QuantityAvailable // "unknown"')
-      DK_PRICE=$(echo "$DK_RESULT" | jq -r '.Product.UnitPrice // "unknown"')
-      DK_LIFECYCLE=$(echo "$DK_RESULT" | jq -r '.Product.ProductStatus.Status // "unknown"')
-      if [ "$DK_STOCK" = "null" ] || echo "$DK_RESULT" | jq -e '.httpStatusCode' > /dev/null 2>&1; then
-        echo "[DigiKey] API error for $MPN — logging and continuing"
-        enrichment+="| DigiKey | Error — see log | — | — | — |\n"
+        -H "X-DIGIKEY-Locale-Currency: USD" \
+        -H "Content-Type: application/json" \
+        -d "{\"Keywords\": \"$MPN\", \"Limit\": 1}")
+      DK_STOCK=$(echo "$DK_RESULT" | jq -r '.Products[0].QuantityAvailable // "unknown"')
+      DK_PRICE=$(echo "$DK_RESULT" | jq -r '.Products[0].UnitPrice // "unknown"')
+      DK_LIFECYCLE=$(echo "$DK_RESULT" | jq -r '.Products[0].ProductStatus.Status // "unknown"')
+      DK_COUNT=$(echo "$DK_RESULT" | jq -r '.Products | length' 2>/dev/null || echo "0")
+      if [ "${DK_COUNT:-0}" -eq 0 ] || [ "$DK_STOCK" = "null" ]; then
+        echo "[DigiKey] No result for $MPN — logging and continuing"
+        enrichment+="| DigiKey | Not found | — | — | — |\n"
       else
-        enrichment+="| DigiKey | $DK_STOCK | $DK_PRICE | $DK_LIFECYCLE | — |\n"
+        enrichment+="| DigiKey | $DK_STOCK | \$$DK_PRICE | $DK_LIFECYCLE | — |\n"
         any_result=true
       fi
     fi
@@ -4786,18 +4816,24 @@ enrich_component() {
 }
 ```
 
-**Integration with Phase 4 BOM writing:**
+**Integration with Phase 4 research loop (DURING selection, not after):**
 
-After each BOM file is written to `.librespin/04-bom/bom-{conceptSlug}.md`, append the enrichment block for each component in that BOM. For each component with a non-generic MPN (i.e., MPN is not "Generic" and not empty):
+For each component being researched — call `enrich_component "$MPN"` BEFORE writing the BOM entry. Use the returned data as the primary source in the balanced scorecard:
 
 ```
-For each selected component with MPN:
-  1. Call: enrich_component "$MPN"
-  2. Append the returned enrichment table to the component's entry in .librespin/04-bom/bom-{conceptSlug}.md
-  3. Continue regardless of enrichment success/failure (D-17)
+For each component in research loop:
+  1. Identify candidate MPNs (web search for discovery is fine here)
+  2. For each candidate MPN:
+     a. If API_MODE=true: call enrich_component "$MPN" — use returned stock/price/lifecycle
+     b. If API_MODE=false: use web estimate, prefix price with "est." in BOM
+  3. Score candidates using balanced scorecard WITH live API data (if available)
+  4. Write BOM entry — API data takes precedence over any web-sourced estimate
+  5. Continue regardless of enrichment success/failure (D-17)
 ```
 
-**Fallback behavior (D-13):** If credentials file does not exist, the bash check at the top of the enrichment block exits early with a log message. Phase 4 continues to its normal completion. No errors are raised.
+**Do NOT wait until after all BOM files are written.** Enrichment data must be available during scoring so the best-stocked, correctly-priced part wins.
+
+**Fallback behavior (D-13):** If credentials file does not exist or `API_MODE=false`, enrichment is skipped and web estimates are used with `est.` prefix. No errors are raised.
 
 **Output contract preservation (D-14):** Enrichment data is appended to `.librespin/04-bom/` files only. The output contract for downstream phases (CalcPad reads `.librespin/07-final-output/`, NGSpice reads `.librespin/08-calculations/`) is unaffected.
 
