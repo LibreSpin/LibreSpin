@@ -242,27 +242,44 @@ else
   # Calculate expiry: 23 hours from now (24h lifetime with 1h safety buffer)
   NEXAR_EXPIRY=$(date -u -d "+23 hours" +%Y-%m-%dT%H:%M:%SZ)
 
-  # Test query — validate token works and API is reachable
-  NEXAR_TEST=$(curl -s -X POST 'https://api.nexar.com/graphql/' \
-    -H "Authorization: Bearer $NEXAR_TOKEN" \
-    -H 'Content-Type: application/json' \
-    -d '{"query": "query { supSearchMpn(q: \"LM358\", limit: 1) { hits } }"}')
-  NEXAR_HITS=$(echo "$NEXAR_TEST" | jq -r '.data.supSearchMpn.hits // 0')
-  NEXAR_TEST_ERROR=$(echo "$NEXAR_TEST" | jq -r '.errors[0].message // empty')
+  # Quota pre-check — read current parts_used before consuming one more
+  CURRENT_PARTS=$(read_credential nexar parts_used 2>/dev/null || echo 0)
+  CURRENT_PARTS=$(( CURRENT_PARTS + 0 ))  # ensure numeric
 
-  if [ "$NEXAR_HITS" -gt 0 ] 2>/dev/null; then
-    echo "VALID: hits=$NEXAR_HITS"
+  if [ "$CURRENT_PARTS" -ge 100 ]; then
+    echo "QUOTA_EXHAUSTED: Nexar quota exhausted (${CURRENT_PARTS}/100 parts used). Cannot run validation test — credentials saved without live test."
   else
-    echo "INVALID: ${NEXAR_TEST_ERROR:-no hits returned for LM358 test query}"
+    if [ "$CURRENT_PARTS" -ge 80 ]; then
+      echo "QUOTA_WARNING: You have used ${CURRENT_PARTS}/100 Nexar free-tier parts. Approaching quota limit."
+    fi
+
+    # Test query — validate token works and API is reachable
+    NEXAR_TEST=$(curl -s -X POST 'https://api.nexar.com/graphql/' \
+      -H "Authorization: Bearer $NEXAR_TOKEN" \
+      -H 'Content-Type: application/json' \
+      -d '{"query": "query { supSearchMpn(q: \"LM358\", limit: 1) { hits } }"}')
+    NEXAR_HITS=$(echo "$NEXAR_TEST" | jq -r '.data.supSearchMpn.hits // 0')
+    NEXAR_TEST_ERROR=$(echo "$NEXAR_TEST" | jq -r '.errors[0].message // empty')
+
+    if [ "$NEXAR_HITS" -gt 0 ] 2>/dev/null; then
+      echo "VALID: hits=$NEXAR_HITS"
+    else
+      echo "INVALID: ${NEXAR_TEST_ERROR:-no hits returned for LM358 test query}"
+    fi
   fi
 fi
 ```
 
-**On VALID:** Write token and expiry, reset parts_used:
+**On VALID (and on QUOTA_EXHAUSTED):** Write token and expiry; increment parts_used by 1 if test ran:
 ```bash
 write_credential nexar access_token "$NEXAR_TOKEN"
 write_credential nexar token_expires "$NEXAR_EXPIRY"
-write_credential nexar parts_used 0
+if [ "$CURRENT_PARTS" -lt 100 ]; then
+  write_credential nexar parts_used $(( CURRENT_PARTS + 1 ))
+else
+  # Quota exhausted — preserve the existing count, do not increment past 100
+  write_credential nexar parts_used "$CURRENT_PARTS"
+fi
 ```
 
 ---
