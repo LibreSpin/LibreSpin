@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
 status: executing
-stopped_at: Completed 1000-01-PLAN.md (Phase 1, 2, 2.5 JS-to-prose rewrite)
-last_updated: "2026-04-10T02:18:49.724Z"
+stopped_at: Completed 1000-02-PLAN.md (Phase 3 and Phase 4 JS-to-prose rewrite)
+last_updated: "2026-04-10T02:31:51.607Z"
 last_activity: 2026-04-10
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 17
-  completed_plans: 14
+  completed_plans: 15
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 ## Current Position
 
 Phase: 1000 (concept-skill-js-to-prose) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-04-10
 
@@ -91,6 +91,7 @@ v0.2 roadmap decisions:
 - [Phase 999.3-02]: Distributor enrichment block injected as markdown prose section in Phase 4 (not inside JS pseudocode); exit 0 on missing credentials; DigiKey X-DIGIKEY-Client-Id header mandatory; Nexar parts_used persisted in credentials file
 - [Phase 999.3]: DIST requirements numbered DIST-01 through DIST-12 covering all 6 suppliers plus credential storage, enrichment integration, fallback, error resilience, output contract, and installer
 - [Phase 1000-concept-skill-js-to-prose]: Replace JS pseudo-code blocks with prose bullet lists and tables (3-10 items each) — format change only, behavioral fidelity preserved
+- [Phase 1000-02]: Bash distributor enrichment block in Phase 4 preserved as bash fence — functional bash code, not pseudo-code, correctly excluded from JS removal
 
 ### Roadmap Evolution
 
@@ -108,6 +109,6 @@ None. Phase 5 spike resolved: CalcPad CE CLI and REST API both working on Linux 
 
 ## Session Continuity
 
-Last session: 2026-04-10T02:18:49.720Z
-Stopped at: Completed 1000-01-PLAN.md (Phase 1, 2, 2.5 JS-to-prose rewrite)
+Last session: 2026-04-10T02:31:51.603Z
+Stopped at: Completed 1000-02-PLAN.md (Phase 3 and Phase 4 JS-to-prose rewrite)
 Resume file: None
