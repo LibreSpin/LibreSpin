@@ -111,10 +111,10 @@ Plans:
 **Goal:** Replace 3,267 lines of never-executed JavaScript pseudo-code in skills/concept/SKILL.md with concise prose instructions, reducing the file from 254KB to ~35KB. Pre-requisite for v0.1 ship — every concept invocation currently loads 3,267 JS lines that Claude reads but never executes.
 **Requirements**: none (format-only rewrite, no new capabilities)
 **Depends on:** None
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 
 Plans:
-- [ ] 1000-01-PLAN.md — Rewrite Phases 1, 2, 2.5 (lines 271–2035, 833 JS lines)
+- [x] 1000-01-PLAN.md — Rewrite Phases 1, 2, 2.5 (lines 271–2035, 833 JS lines)
 - [ ] 1000-02-PLAN.md — Rewrite Phases 3, 4 (lines 2036–4839, 1531 JS lines — heaviest sections)
 - [ ] 1000-03-PLAN.md — Rewrite Phases 5, 6, 7 (lines 4840–7388, 1880 JS lines)
 - [ ] 1000-04-PLAN.md — Structural verification + /librespin:concept behavioral validation (blocking gate)
@@ -132,4 +132,4 @@ Plans:
 | 7. NGSpice Simulation Skill | v0.2 | 2/2 | Complete   | 2026-04-08 |
 | 8. Installer Update | v0.2 | 1/1 | Complete   | 2026-04-08 |
 | 999.3. Distributor API Integration | v0.3 | 3/3 | Complete   | 2026-04-09 |
-| 1000. Concept Skill JS-to-Prose | backlog | 0/4 | Planned    |  |
+| 1000. Concept Skill JS-to-Prose | backlog | 1/4 | In Progress|  |

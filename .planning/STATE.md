@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: CalcPad & NGSpice
 status: executing
-stopped_at: Completed 999.3-03-PLAN.md — installer update + formal DIST requirements
-last_updated: "2026-04-09T01:28:12.575Z"
-last_activity: 2026-04-09 -- Phase 999.3 execution started
+stopped_at: Completed 1000-01-PLAN.md (Phase 1, 2, 2.5 JS-to-prose rewrite)
+last_updated: "2026-04-10T02:18:49.724Z"
+last_activity: 2026-04-10
 progress:
-  total_phases: 6
-  completed_phases: 4
-  total_plans: 13
-  completed_plans: 12
+  total_phases: 7
+  completed_phases: 5
+  total_plans: 17
+  completed_plans: 14
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-08)
 
 **Core value:** A minimal, lightweight harness that makes Claude Code an expert hardware design assistant — the intelligence lives in the prompts, not in code.
-**Current focus:** Phase 999.3 — distributor-api-integration-octopart-nexar-digikey-mouser-arrow-lcsc
+**Current focus:** Phase 1000 — concept-skill-js-to-prose
 
 ## Current Position
 
-Phase: 999.3 (distributor-api-integration-octopart-nexar-digikey-mouser-arrow-lcsc) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 999.3
-Last activity: 2026-04-09 -- Phase 999.3 execution started
+Phase: 1000 (concept-skill-js-to-prose) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-04-10
 
 Progress: [----------] 0% (0/4 phases)
 
@@ -90,10 +90,12 @@ v0.2 roadmap decisions:
 - [Phase 999.3]: DigiKey X-DIGIKEY-Client-Id header required on all API requests — critical auth requirement
 - [Phase 999.3-02]: Distributor enrichment block injected as markdown prose section in Phase 4 (not inside JS pseudocode); exit 0 on missing credentials; DigiKey X-DIGIKEY-Client-Id header mandatory; Nexar parts_used persisted in credentials file
 - [Phase 999.3]: DIST requirements numbered DIST-01 through DIST-12 covering all 6 suppliers plus credential storage, enrichment integration, fallback, error resilience, output contract, and installer
+- [Phase 1000-concept-skill-js-to-prose]: Replace JS pseudo-code blocks with prose bullet lists and tables (3-10 items each) — format change only, behavioral fidelity preserved
 
 ### Roadmap Evolution
 
 2026-04-08 — v0.2 roadmap created. 4 phases (5–8), 19 requirements mapped (CALC-01 through CALC-08, SIM-01 through SIM-10, PKG-07). Phase 5 spike precedes Phase 6 calcpad skill; Phase 7 simulate reads calcpad output; Phase 8 installer follows both skills.
+
 - Phase 1000 added (2026-04-09): Concept Skill JS-to-Prose — replace 3,267 lines of never-executed JavaScript with concise prose, targeting 254KB → ~35KB reduction. Pre-ship blocker for v0.1.
 
 ### Pending Todos
@@ -106,6 +108,6 @@ None. Phase 5 spike resolved: CalcPad CE CLI and REST API both working on Linux 
 
 ## Session Continuity
 
-Last session: 2026-04-09T01:07:57.511Z
-Stopped at: Completed 999.3-03-PLAN.md — installer update + formal DIST requirements
+Last session: 2026-04-10T02:18:49.720Z
+Stopped at: Completed 1000-01-PLAN.md (Phase 1, 2, 2.5 JS-to-prose rewrite)
 Resume file: None
