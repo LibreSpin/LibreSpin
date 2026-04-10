@@ -18,5 +18,8 @@ Thumbs.db
 *.swp
 *.swo
 
-# Local plugin marketplace for testing unpushed changes (see CLAUDE.md)
-local-marketplace/
+# GSD executor worktrees (temporary, auto-cleaned — never commit)
+.claude/worktrees/
+
+# LibreSpin runtime output (generated per user project — not source)
+.librespin/
