@@ -3390,682 +3390,174 @@ Generate final deliverables: comparison matrix, recommendation, and per-concept 
 
 Load data from Phases 6, 7, and 8 for final presentation.
 
-```javascript
-// Discover concept names from Phase 2 score files
-function discoverConceptsFromPhase6() {
-  const phase6Dir = '.librespin/06-refinement';
-  const files = fs.readdirSync(phase6Dir).filter(f => f.startsWith('score-') && f.endsWith('.md'));
+**Discover concepts from Phase 6:**
+- List all files in `.librespin/06-refinement/` matching `score-*.md`.
+- Extract concept name from each file's `# Quality Score: {name}` header.
+- Fallback: convert slug (filename minus `score-` prefix and `.md`) to title case.
 
-  // Extract concept names from filenames: score-{concept-slug}.md -> concept-slug
-  const conceptSlugs = files.map(f => f.replace(/^score-/, '').replace(/\.md$/, ''));
-
-  // Convert slugs back to readable names by reading each file's header
-  const conceptNames = [];
-  for (const slug of conceptSlugs) {
-    const filePath = `${phase6Dir}/score-${slug}.md`;
-    const content = fs.readFileSync(filePath, 'utf-8');
-    // Extract name from "# Quality Score: [Concept Name]" header
-    const nameMatch = content.match(/^# Quality Score: (.+)$/m);
-    if (nameMatch) {
-      conceptNames.push(nameMatch[1]);
-    } else {
-      // Fallback: convert slug to title case
-      conceptNames.push(slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
-    }
-  }
-
-  return conceptNames;
-}
-
-// Load all Phase 2 outputs for final presentation
-function loadPhase6Outputs(conceptNames) {
-  const concepts = [];
-
-  for (const name of conceptNames) {
-    const conceptSlug = name.toLowerCase().replace(/\s+/g, '-');
-
-    // Load quality scores from Phase 2
-    const scoreFile = `.librespin/06-refinement/score-${conceptSlug}.md`;
-    const qualityScore = parseScoreFile(scoreFile);
-
-    // Load refinement log from Phase 2
-    const refinementLog = `.librespin/06-refinement/refinement-log.md`;
-    const refinementActions = parseRefinementLog(refinementLog, name);
-
-    // Load block diagram and coverage from Phase 1
-    const analysisFile = `.librespin/05-detailed-designs/analysis-${conceptSlug}.md`;
-    const blockDiagram = extractBlockDiagram(analysisFile);
-    const coverageAnalysis = extractCoverageAnalysis(analysisFile);
-    const gaps = extractGaps(analysisFile);
-
-    // Load BOM from Phase 2 (may be updated in Phase 2)
-    const bomFile = `.librespin/04-bom/bom-${conceptSlug}.md`;
-    const bom = parseBom(bomFile);
-    const bomCost = calculateBomTotal(bom);
-    const datasheetLinks = extractDatasheetLinks(bom);
-
-    concepts.push({
-      name: name,
-      slug: conceptSlug,
-      qualityScore: qualityScore,
-      refinementActions: refinementActions,
-      blockDiagram: blockDiagram,
-      coverageAnalysis: coverageAnalysis,
-      coverageByTier: coverageAnalysis.byTier,
-      gaps: gaps,
-      bom: bom,
-      bomCost: bomCost,
-      datasheetLinks: datasheetLinks,
-      worstLeadTime: extractWorstLeadTime(bom)
-    });
-  }
-
-  return concepts;
-}
-
-// Parse quality score file from Phase 2
-function parseScoreFile(filePath) {
-  // Read score-{concept}.md
-  // Extract: overall score, breakdown by dimension
-  // Format:
-  // **Overall:** 85%
-  // **Breakdown:**
-  // - Coverage: 90%
-  // - Cost: 80%
-  // - Availability: 85%
-  // - Complexity: 75%
-
-  return {
-    overall: /* extracted overall percentage */,
-    breakdown: {
-      coverage: /* 60% weight */,
-      cost: /* 15% weight */,
-      availability: /* 15% weight */,
-      complexity: /* 10% weight */
-    }
-  };
-}
-
-// Extract worst-case lead time from BOM
-function extractWorstLeadTime(bom) {
-  let worstWeeks = 0;
-
-  for (const part of bom) {
-    if (part.leadTime) {
-      const weeks = parseLeadTimeToWeeks(part.leadTime);
-      if (weeks > worstWeeks) {
-        worstWeeks = weeks;
-      }
-    }
-  }
-
-  return worstWeeks > 0 ? worstWeeks : 'N/A';
-}
-
-function parseLeadTimeToWeeks(leadTimeStr) {
-  // Parse "4 weeks", "2 wk", "In Stock" -> number
-  if (leadTimeStr.toLowerCase().includes('stock')) return 0;
-  const match = leadTimeStr.match(/(\d+)\s*w/i);
-  return match ? parseInt(match[1]) : 0;
-}
-```
+**Load per-concept data:**
+- Quality score: parse `**Overall:**` and breakdown dimensions from `.librespin/06-refinement/score-{slug}.md`.
+- Block diagram, coverage analysis, gaps: extract from `.librespin/05-detailed-designs/analysis-{slug}.md`.
+- BOM: parse table from `.librespin/04-bom/bom-{slug}.md`; sum unit prices for `bomCost`.
+- Worst lead time: scan BOM for highest lead time value; parse "N weeks"/"N wk" patterns; "In Stock" = 0. Return `N/A` if no lead time data.
+- Assemble per-concept record: `{name, slug, qualityScore, blockDiagram, coverageAnalysis, coverageByTier, gaps, bom, bomCost, worstLeadTime}`.
 
 ### CONCEPT SELECTION
 
 Select top 3 concepts for final presentation.
 
-```javascript
-// Select top 3 concepts by quality score
-function selectTop3Concepts(concepts) {
-  // Sort by composite quality score (descending)
-  const sorted = concepts.sort((a, b) =>
-    b.qualityScore.overall - a.qualityScore.overall
-  );
-
-  // Filter to concepts that passed 80% threshold
-  const passing = sorted.filter(c => c.qualityScore.overall >= 80);
-
-  if (passing.length >= 3) {
-    // Normal case: take top 3 passing concepts
-    return passing.slice(0, 3);
-  }
-
-  if (passing.length > 0) {
-    // Partial case: include best available with warning
-    console.warn(`WARNING: Only ${passing.length} concepts passed 80% threshold`);
-    const selected = [...passing];
-
-    // Add best non-passing concepts to reach 3 (if available)
-    const notPassing = sorted.filter(c => c.qualityScore.overall < 80);
-    for (const concept of notPassing) {
-      if (selected.length >= 3) break;
-      concept.warning = `Below threshold (${concept.qualityScore.overall}%)`;
-      selected.push(concept);
-    }
-
-    return selected;
-  }
-
-  // No concepts passed - return best 3 with warnings
-  console.warn('WARNING: No concepts passed 80% threshold');
-  return sorted.slice(0, 3).map(c => ({
-    ...c,
-    warning: `Below threshold (${c.qualityScore.overall}%)`
-  }));
-}
-```
+- Sort all concepts by quality score (descending).
+- If ≥3 concepts passed (≥80%): return top 3 passing concepts.
+- If 1–2 passed: warn "Only {N} concepts passed 80% threshold"; include all passing plus enough non-passing (with `warning: "Below threshold ({X}%)"`) to reach 3 total.
+- If none passed: warn; return top 3 with `warning` field set on each.
 
 ### COMPARISON MATRIX
 
 Generate trade-off comparison matrix with relative ranking (<50 lines).
 
-```javascript
-// Generate comparison matrix with relative ranking
-// Output: markdown table under 50 lines per ROADMAP.md
-function generateComparisonMatrix(concepts) {
-  // Sort by quality score (highest first) for column order
-  const sorted = [...concepts].sort((a, b) =>
-    b.qualityScore.overall - a.qualityScore.overall
-  );
+Sort concepts by quality score (descending) for column order. Generate 8-row table (max 50 lines):
 
-  // Calculate relative rankings for each dimension
-  const rankings = {
-    bomCost: rankByValue(sorted, c => c.bomCost, 'asc'),         // lower = Best
-    complexity: rankByValue(sorted, c => c.qualityScore.breakdown.complexity, 'desc'), // higher = simpler = Best
-    risk: rankByValue(sorted, c => c.qualityScore.breakdown.availability, 'desc'),     // higher availability = lower risk = Best
-    leadTime: rankByValue(sorted, c => typeof c.worstLeadTime === 'number' ? c.worstLeadTime : 99, 'asc') // lower = Best
-  };
+| Dimension | Values |
+|-----------|--------|
+| BOM Cost | Absolute `$X.XX (Best\|Mid\|Worst)` — lower = Best |
+| Complexity | Relative rank — higher complexity score (simpler design) = Best |
+| Supply Risk | Relative rank based on availability score — higher = lower risk = Best |
+| Coverage | Absolute percentages |
+| Lead Time | Absolute worst-case weeks (`N/A` if unknown) — lower = Best |
+| Components | BOM line count |
+| Quality Score | Absolute overall score % |
+| Best For | Dominant strength: coverage ≥90% → "Max Features"; cost ≥85% → "Budget"; availability ≥90% → "Availability"; complexity ≥85% → "Simplicity"; else → "Balanced" |
 
-  // Build markdown table (8 rows max per CONTEXT.md)
-  let md = `# Comparison Matrix\n\n`;
-  md += `| Dimension | ${sorted.map(c => c.name).join(' | ')} |\n`;
-  md += `|-----------|${sorted.map(() => ':--------:').join('|')}|\n`;
-
-  // Row 1: BOM Cost (absolute values + ranking)
-  md += `| BOM Cost | ${sorted.map((c, i) => `$${c.bomCost.toFixed(2)} (${rankings.bomCost[i]})`).join(' | ')} |\n`;
-
-  // Row 2: Complexity (relative ranking)
-  md += `| Complexity | ${rankings.complexity.join(' | ')} |\n`;
-
-  // Row 3: Supply Risk (relative ranking based on availability score)
-  md += `| Supply Risk | ${rankings.risk.join(' | ')} |\n`;
-
-  // Row 4: Coverage (absolute percentages)
-  md += `| Coverage | ${sorted.map(c => `${c.qualityScore.breakdown.coverage}%`).join(' | ')} |\n`;
-
-  // Row 5: Lead Time (absolute values)
-  md += `| Lead Time | ${sorted.map(c => typeof c.worstLeadTime === 'number' ? `${c.worstLeadTime} wk` : 'N/A').join(' | ')} |\n`;
-
-  // Row 6: Component Count
-  md += `| Components | ${sorted.map(c => c.bom.length.toString()).join(' | ')} |\n`;
-
-  // Row 7: Quality Score (absolute)
-  md += `| Quality Score | ${sorted.map(c => `${c.qualityScore.overall}%`).join(' | ')} |\n`;
-
-  // Row 8: Best For (qualitative summary)
-  md += `| Best For | ${sorted.map(c => determineBestFor(c)).join(' | ')} |\n`;
-
-  return md;
-}
-
-// Rank concepts by a value (returns array of 'Best'/'Mid'/'Worst' strings)
-// Handles ties by assigning same rank
-function rankByValue(concepts, getValue, order) {
-  const values = concepts.map(getValue);
-
-  // Sort values to determine ranks
-  const sortedValues = [...values].sort((a, b) =>
-    order === 'asc' ? a - b : b - a
-  );
-
-  // Assign ranks handling ties
-  return values.map(v => {
-    const position = sortedValues.indexOf(v);
-    const reversePosition = sortedValues.length - 1 - sortedValues.lastIndexOf(v);
-
-    // If first position (best)
-    if (position === 0) return 'Best';
-
-    // If last position (worst)
-    if (reversePosition === 0) return 'Worst';
-
-    // Otherwise middle
-    return 'Mid';
-  });
-}
-
-// Determine "Best For" summary based on concept strengths
-function determineBestFor(concept) {
-  const score = concept.qualityScore;
-
-  // Check for dominant strength
-  if (score.breakdown.coverage >= 90) return 'Max Features';
-  if (score.breakdown.cost >= 85) return 'Budget';
-  if (score.breakdown.availability >= 90) return 'Availability';
-  if (score.breakdown.complexity >= 85) return 'Simplicity';
-
-  // Default to balanced
-  return 'Balanced';
-}
-```
+Relative ranking assigns `Best` (first position), `Worst` (last position), or `Mid` (all others). Handle ties by assigning the same rank.
 
 ### RECOMMENDATION
 
 Generate directive recommendation with rationale and runner-up.
 
-```javascript
-// Generate recommendation section
-// Per CONTEXT.md: directive tone, brief rationale, trade-off, runner-up
-function generateRecommendation(concepts) {
-  // Sort by quality score
-  const sorted = [...concepts].sort((a, b) =>
-    b.qualityScore.overall - a.qualityScore.overall
-  );
+**Select recommended concept:**
+- Sort by quality score (descending); default to rank-1.
+- If top 2 scores are within 5 points AND rank-2 has a higher complexity score (simpler design): prefer rank-2 as recommended.
 
-  let recommended = sorted[0];
-  const runnerUp = sorted[1];
+**Top strength** (first match wins):
+- coverage ≥ 90% → "highest coverage. It addresses {X}% of requirements including all Critical items."
+- BOM cost within 10% of minimum → "lowest cost. At ${X}, it offers the best value while meeting requirements."
+- availability ≥ 90% → "best component availability. All parts are readily available with minimal supply chain risk."
+- default → "balanced trade-offs. It provides the best combination of cost, coverage, and complexity."
 
-  // If scores within 5%, favor simpler (lower complexity = higher complexity score)
-  if (sorted.length >= 2) {
-    const scoreDiff = sorted[0].qualityScore.overall - sorted[1].qualityScore.overall;
-    if (scoreDiff <= 5) {
-      // Favor concept with higher complexity score (simpler design)
-      if (sorted[1].qualityScore.breakdown.complexity > sorted[0].qualityScore.breakdown.complexity) {
-        recommended = sorted[1];
-      }
-    }
-  }
+**Main trade-off** (first match wins, or omit if none):
+- BOM cost >20% above cheapest alternative → "higher BOM cost (${X} vs ${Y}), the additional investment provides better coverage and reliability"
+- Coverage >5 points below best alternative → "slightly lower coverage, it compensates with better cost and availability"
+- Availability >10 points below best alternative → "some supply chain considerations, all critical components remain available through major distributors"
 
-  // Build rationale
-  const strength = findTopStrength(recommended, sorted);
-  const tradeoff = findMainTradeoff(recommended, sorted);
-  const runnerUpReason = findRunnerUpReason(runnerUp, recommended);
+**Runner-up reason** (first match wins):
+- Runner-up costs <85% of recommended → "budget is the primary constraint"
+- Runner-up availability score higher → "component availability and lead times are critical"
+- Runner-up coverage score higher → "maximum feature coverage is essential"
+- Runner-up complexity score higher → "development simplicity is prioritized"
+- Default → "different trade-offs better match your priorities"
 
-  let md = `\n## Recommendation\n\n`;
-  md += `**Recommended: ${recommended.name}**\n\n`;
+**Output format:**
+```
+## Recommendation
 
-  // Directive tone: "Recommend X because..."
-  md += `Recommend ${recommended.name} for its ${strength.description}. `;
-  md += `${strength.detail}\n\n`;
+**Recommended: {name}**
 
-  // Trade-off acknowledgment
-  if (tradeoff) {
-    md += `Though it has ${tradeoff.description}, ${tradeoff.mitigation}.\n\n`;
-  }
+Recommend {name} for its {strength}. {detail}
 
-  // Runner-up
-  if (runnerUp) {
-    md += `**Runner-up:** Consider ${runnerUp.name} if ${runnerUpReason}.\n`;
-  }
+Though it has {tradeoff}, {mitigation}.
 
-  return md;
-}
-
-// Find the top strength of the recommended concept
-function findTopStrength(recommended, allConcepts) {
-  const score = recommended.qualityScore;
-
-  // Check if highest coverage
-  if (score.breakdown.coverage >= 90) {
-    return {
-      description: 'highest coverage',
-      detail: `It addresses ${score.breakdown.coverage}% of requirements including all Critical items.`
-    };
-  }
-
-  // Check if lowest cost (within 10% of minimum)
-  const costs = allConcepts.map(c => c.bomCost);
-  const minCost = Math.min(...costs);
-  if (recommended.bomCost <= minCost * 1.1) {
-    return {
-      description: 'lowest cost',
-      detail: `At $${recommended.bomCost.toFixed(2)}, it offers the best value while meeting requirements.`
-    };
-  }
-
-  // Check if best availability
-  if (score.breakdown.availability >= 90) {
-    return {
-      description: 'best component availability',
-      detail: `All parts are readily available with minimal supply chain risk.`
-    };
-  }
-
-  // Default to balanced trade-offs
-  return {
-    description: 'balanced trade-offs',
-    detail: 'It provides the best combination of cost, coverage, and complexity.'
-  };
-}
-
-// Find the main trade-off of the recommended concept
-function findMainTradeoff(recommended, allConcepts) {
-  // Compare recommended to others
-  const others = allConcepts.filter(c => c !== recommended);
-  if (others.length === 0) return null;
-
-  // Find where recommended is weakest relative to others
-  const minOtherCost = Math.min(...others.map(c => c.bomCost));
-  const maxOtherCoverage = Math.max(...others.map(c => c.qualityScore.breakdown.coverage));
-  const maxOtherAvailability = Math.max(...others.map(c => c.qualityScore.breakdown.availability));
-
-  // Check if cost is notably higher
-  if (recommended.bomCost > minOtherCost * 1.2) {
-    return {
-      description: `higher BOM cost ($${recommended.bomCost.toFixed(2)} vs $${minOtherCost.toFixed(2)})`,
-      mitigation: 'the additional investment provides better coverage and reliability'
-    };
-  }
-
-  // Check if coverage is lower
-  if (recommended.qualityScore.breakdown.coverage < maxOtherCoverage - 5) {
-    return {
-      description: 'slightly lower coverage',
-      mitigation: 'it compensates with better cost and availability'
-    };
-  }
-
-  // Check if availability is worse
-  if (recommended.qualityScore.breakdown.availability < maxOtherAvailability - 10) {
-    return {
-      description: 'some supply chain considerations',
-      mitigation: 'all critical components remain available through major distributors'
-    };
-  }
-
-  return null; // No notable trade-off
-}
-
-// Find reason to consider the runner-up
-function findRunnerUpReason(runnerUp, recommended) {
-  if (!runnerUp) return 'no alternatives available';
-
-  // Find runner-up's strength relative to recommended
-  if (runnerUp.bomCost < recommended.bomCost * 0.85) {
-    return 'budget is the primary constraint';
-  }
-
-  if (runnerUp.qualityScore.breakdown.availability > recommended.qualityScore.breakdown.availability) {
-    return 'component availability and lead times are critical';
-  }
-
-  if (runnerUp.qualityScore.breakdown.coverage > recommended.qualityScore.breakdown.coverage) {
-    return 'maximum feature coverage is essential';
-  }
-
-  if (runnerUp.qualityScore.breakdown.complexity > recommended.qualityScore.breakdown.complexity) {
-    return 'development simplicity is prioritized';
-  }
-
-  return 'different trade-offs better match your priorities';
-}
+**Runner-up:** Consider {runner-up name} if {reason}.
 ```
 
 ### CONCEPT FOLDER GENERATION
 
 Create single README.md per concept with inline BOM, diagram, coverage, and references.
 
-```javascript
-// Generate concept README with all content inline
-// Per CONTEXT.md: single file with block diagram, BOM, coverage, references
-function generateConceptReadme(concept) {
-  let md = `# Concept: ${concept.name}\n\n`;
+Generate `{outputDir}/{slug}/README.md` with this structure:
 
-  // Summary stats at top
-  md += `**Quality Score:** ${concept.qualityScore.overall}%\n`;
-  md += `**BOM Cost:** $${concept.bomCost.toFixed(2)}\n`;
-  md += `**Coverage:** ${concept.qualityScore.breakdown.coverage}%`;
-  if (concept.coverageByTier) {
-    md += ` (Critical: ${concept.coverageByTier.Critical || 0}%, `;
-    md += `Important: ${concept.coverageByTier.Important || 0}%, `;
-    md += `Nice-to-have: ${concept.coverageByTier['Nice-to-have'] || 0}%)`;
-  }
-  md += `\n\n`;
+```markdown
+# Concept: {name}
 
-  // Warning if below threshold
-  if (concept.warning) {
-    md += `> **Warning:** ${concept.warning}\n\n`;
-  }
+**Quality Score:** {X}%
+**BOM Cost:** ${X.XX}
+**Coverage:** {X}% (Critical: {X}%, Important: {X}%, Nice-to-have: {X}%)
 
-  // Architecture section with inline block diagram
-  md += `## Architecture\n\n`;
-  md += '```\n';
-  md += concept.blockDiagram || '(Block diagram not available)';
-  md += '\n```\n\n';
+> **Warning:** {warning text}   ← only if concept is below threshold
 
-  // Bill of Materials section
-  md += `## Bill of Materials\n\n`;
-  md += generateBomTable(concept.bom);
-  md += `\n**Total:** $${concept.bomCost.toFixed(2)}\n\n`;
+## Architecture
 
-  // Coverage Analysis section
-  md += `## Coverage Analysis\n\n`;
-  md += generateCoverageTable(concept);
-
-  // Gaps section
-  md += `\n### Gaps\n\n`;
-  if (concept.gaps && concept.gaps.length > 0) {
-    for (const gap of concept.gaps) {
-      md += `- **${gap.id} (${gap.priority}):** ${gap.description}\n`;
-    }
-  } else {
-    md += `- None - all requirements addressed\n`;
-  }
-  md += '\n';
-
-  // References section (vendor app notes only: TI, ADI, ST)
-  md += `## References\n\n`;
-  const references = findVendorReferences(concept);
-  if (references.length > 0) {
-    for (const ref of references) {
-      md += `- [${ref.title}](${ref.url}) - ${ref.description}\n`;
-    }
-  } else {
-    md += `- No vendor reference designs applicable\n`;
-  }
-
-  return md;
-}
-
-// Generate BOM table with datasheet links inline
-function generateBomTable(bom) {
-  let md = '| Ref | Part | MPN | Manufacturer | Description | Qty | Price | Datasheet |\n';
-  md += '|-----|------|-----|--------------|-------------|-----|-------|----------|\n';
-
-  for (const part of bom) {
-    const datasheet = part.datasheetUrl
-      ? `[Link](${part.datasheetUrl})`
-      : '-';
-    const manufacturer = part.manufacturer || '-';
-    const mpn = part.mpn || 'Generic';
-
-    md += `| ${part.ref} | ${part.category || part.part} | ${mpn} | ${manufacturer} | ${part.description} | ${part.qty} | $${part.unitPrice.toFixed(2)} | ${datasheet} |\n`;
-  }
-
-  return md;
-}
-
-// Generate coverage analysis table
-function generateCoverageTable(concept) {
-  let md = '| Priority | Total | Covered | Coverage |\n';
-  md += '|----------|-------|---------|----------|\n';
-
-  const tiers = ['Critical', 'Important', 'Nice-to-have'];
-  for (const tier of tiers) {
-    const total = concept.coverageAnalysis?.reqCounts?.[tier] || 0;
-    const covered = concept.coverageAnalysis?.coveredCounts?.[tier] || 0;
-    const coverage = concept.coverageByTier?.[tier] || 0;
-    md += `| ${tier} | ${total} | ${covered} | ${coverage}% |\n`;
-  }
-
-  return md;
-}
-
-// Find vendor reference designs (TI, ADI, ST only per CONTEXT.md)
-function findVendorReferences(concept) {
-  const references = [];
-  const keyComponents = concept.bom.filter(p =>
-    ['MCU', 'Regulator', 'Sensor', 'Wireless', 'Motor Driver', 'Power'].some(
-      cat => (p.category || '').includes(cat) || (p.description || '').includes(cat)
-    )
-  );
-
-  for (const part of keyComponents) {
-    const mfr = (part.manufacturer || '').toLowerCase();
-
-    // TI reference designs
-    if (mfr.includes('texas') || mfr.includes('ti ') || mfr === 'ti') {
-      references.push({
-        title: `TI ${part.mpn} Reference Design`,
-        url: `https://www.ti.com/product/${part.mpn}#design-development`,
-        description: `Reference designs for ${part.description}`
-      });
-    }
-
-    // ST reference designs
-    if (mfr.includes('stm') || mfr.includes('st ') || mfr === 'st') {
-      references.push({
-        title: `ST ${part.mpn} Application Notes`,
-        url: `https://www.st.com/en/product/${part.mpn}#documentation`,
-        description: `Application notes for ${part.description}`
-      });
-    }
-
-    // ADI reference designs
-    if (mfr.includes('analog') || mfr.includes('adi') || mfr === 'adi') {
-      references.push({
-        title: `ADI ${part.mpn} Reference Circuit`,
-        url: `https://www.analog.com/en/products/${part.mpn}#design-resources`,
-        description: `Reference circuits for ${part.description}`
-      });
-    }
-  }
-
-  // Limit to 5 references per concept
-  return references.slice(0, 5);
-}
 ```
+{block diagram or "(Block diagram not available)"}
+```
+
+## Bill of Materials
+
+| Ref | Part | MPN | Manufacturer | Description | Qty | Price | Datasheet |
+...
+**Total:** ${X.XX}
+
+## Coverage Analysis
+
+| Priority | Total | Covered | Coverage |
+...
+
+### Gaps
+
+- **{id} ({priority}):** {description}
+- None - all requirements addressed   ← if no gaps
+
+## References
+
+- [{title}]({url}) - {description}   ← TI/ST/ADI only, max 5
+- No vendor reference designs applicable   ← if none found
+```
+
+**Vendor references:** Filter BOM for key components (MCU, Regulator, Sensor, Wireless, Motor Driver, Power). For each: TI (manufacturer contains "texas", "ti " or = "ti") → `https://www.ti.com/product/{mpn}#design-development`; ST (contains "stm", "st " or = "st") → `https://www.st.com/en/product/{mpn}#documentation`; ADI (contains "analog", "adi" or = "adi") → `https://www.analog.com/en/products/{mpn}#design-resources`. Limit to 5 references per concept.
 
 ### STATUS FILE GENERATION
 
 Generate status.md with summary and next steps (<30 lines).
 
-```javascript
-// Generate status file under 30 lines per ROADMAP.md
-function generateStatusFile(concepts, outputPath) {
-  const date = new Date().toISOString().split('T')[0];
-  const sorted = [...concepts].sort((a, b) =>
-    b.qualityScore.overall - a.qualityScore.overall
-  );
-  const recommended = sorted[0];
+Generate `.librespin/07-final-output/status.md` (target <30 lines):
 
-  let md = `# Status\n\n`;
-  md += `**Created:** ${date}\n`;
-  md += `**Recommended:** ${recommended.name}\n`;
-  md += `**Status:** Awaiting Selection\n\n`;
+```markdown
+# Status
 
-  md += `## Concepts\n\n`;
-  for (const c of sorted) {
-    md += `- **${c.name}:** ${c.qualityScore.overall}% quality, $${c.bomCost.toFixed(2)} BOM`;
-    if (c.warning) md += ` (${c.warning})`;
-    md += `\n`;
-  }
+**Created:** {YYYY-MM-DD}
+**Recommended:** {top concept name}
+**Status:** Awaiting Selection
 
-  md += `\n## Output Files\n\n`;
-  md += `- comparison-matrix.md\n`;
-  md += `- status.md\n`;
-  for (const c of sorted) {
-    md += `- ${c.slug}/README.md\n`;
-  }
+## Concepts
 
-  md += `\n## Next Steps\n\n`;
-  md += `1. Review comparison-matrix.md for trade-off analysis\n`;
-  md += `2. Select preferred concept\n`;
-  md += `3. Hand off selected concept folder to design engineer\n`;
+- **{name}:** {X}% quality, ${X.XX} BOM [{warning text}]
 
-  return md;
-}
+## Output Files
+
+- comparison-matrix.md
+- status.md
+- {slug}/README.md  (one per concept)
+
+## Next Steps
+
+1. Review comparison-matrix.md for trade-off analysis
+2. Select preferred concept
+3. Hand off selected concept folder to design engineer
 ```
 
 ### MAIN WORKFLOW
 
 Phase 1 orchestration bringing all pieces together.
 
-```javascript
-// Phase 1 main workflow
-async function executePhase9(conceptNames = null) {
-  const outputDir = '.librespin/07-final-output';
-
-  // Step 1: Discover or use provided concept names
-  if (!conceptNames || conceptNames.length === 0) {
-    conceptNames = discoverConceptsFromPhase6();
-    if (conceptNames.length === 0) {
-      throw new Error('No concepts found in Phase 2 output. Run Phase 2 first.');
-    }
-    console.log(`Discovered ${conceptNames.length} concept(s) from Phase 2: ${conceptNames.join(', ')}`);
-  }
-
-  // Step 2: Load Phase 2 outputs
-  const concepts = loadPhase6Outputs(conceptNames);
-
-  if (concepts.length === 0) {
-    throw new Error('No concepts available from Phase 2. Cannot generate output.');
-  }
-
-  // Step 2: Select top 3 concepts
-  const selectedConcepts = selectTop3Concepts(concepts);
-
-  // Step 3: Generate comparison matrix
-  const comparisonMatrix = generateComparisonMatrix(selectedConcepts);
-
-  // Step 4: Generate recommendation (appended to comparison matrix)
-  const recommendation = generateRecommendation(selectedConcepts);
-  const comparisonWithRec = comparisonMatrix + recommendation;
-
-  // Step 5: Create output directory structure
-  await createDirectory(outputDir);
-  for (const concept of selectedConcepts) {
-    await createDirectory(`${outputDir}/${concept.slug}`);
-  }
-
-  // Step 6: Generate concept folders with README.md each
-  for (const concept of selectedConcepts) {
-    const readme = generateConceptReadme(concept);
-    await writeFile(`${outputDir}/${concept.slug}/README.md`, readme);
-  }
-
-  // Step 7: Write comparison-matrix.md
-  await writeFile(`${outputDir}/comparison-matrix.md`, comparisonWithRec);
-
-  // Step 8: Write status.md
-  const statusFile = generateStatusFile(selectedConcepts, outputDir);
-  await writeFile(`${outputDir}/status.md`, statusFile);
-
-  // Step 9: Update librespin-concept-state.md
-  await updateState({
-    phase: 9,
-    status: 'complete',
-    outputFiles: [
-      `${outputDir}/comparison-matrix.md`,
-      `${outputDir}/status.md`,
-      ...selectedConcepts.map(c => `${outputDir}/${c.slug}/README.md`)
-    ],
-    recommendedConcept: selectedConcepts[0].name
-  });
-
-  return {
-    success: true,
-    concepts: selectedConcepts.length,
-    recommended: selectedConcepts[0].name,
-    outputDir: outputDir,
-    files: [
-      'comparison-matrix.md',
-      'status.md',
-      ...selectedConcepts.map(c => `${c.slug}/README.md`)
-    ]
-  };
-}
-```
+1. Discover concept names from `.librespin/06-refinement/` (or use names passed in). If none found: STOP "No concepts found in Phase 6 output. Run Phase 6 first."
+2. Load all Phase 6 outputs for each concept.
+3. If no concepts loaded: STOP "No concepts available. Cannot generate output."
+4. Select top 3 concepts by quality score.
+5. Generate comparison matrix (table + recommendation section appended).
+6. Create `.librespin/07-final-output/` and one subdirectory per concept.
+7. Write `{slug}/README.md` for each selected concept.
+8. Write `comparison-matrix.md` (matrix + recommendation).
+9. Write `status.md` (summary, concept list, output files, next steps).
+10. Update `.librespin/state.md` — set `phase` to `7-final-output`.
 
 ### OUTPUT DIRECTORY STRUCTURE
 
@@ -4085,21 +3577,16 @@ Final output organization per CONTEXT.md:
 
 ### ERROR HANDLING
 
-```javascript
-// Phase 1 error scenarios
-// - Missing Phase 2 files: STOP with error directing to run Phase 2 first
-// - No concepts passed validation: Include best available with warnings
-// - Missing BOM/diagram data: Generate partial README with placeholders
-// - Vendor reference search fails: Proceed without references section
-```
+- Missing Phase 6 files: STOP with error directing to run Phase 6 first.
+- No concepts passed validation: Include best available with `warning` field set.
+- Missing BOM/diagram data: Generate partial README with placeholder text.
+- Vendor reference search fails: Proceed without references section.
 
 **Update state file** `.librespin/state.md` — set `phase` to `7-final-output`:
 
-```javascript
-const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
-const updatedState = existingState.replace(/^phase: .+$/m, `phase: '7-final-output'`);
-fs.writeFileSync('.librespin/state.md', updatedState);
-```
+- Read `.librespin/state.md`.
+- Replace the `phase: ...` frontmatter field value with `'7-final-output'`.
+- Write the updated content back to `.librespin/state.md`.
 
 ## PHASE DISPATCH
 
