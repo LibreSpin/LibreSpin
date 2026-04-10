@@ -255,39 +255,33 @@ An open-source, AI-driven end-to-end PCB and embedded circuit design workflow to
 
 ## Local Testing (Before Pushing to GitHub)
 
-The primary distribution channel is the Claude Code plugin marketplace (`/plugin install LibreSpin/LibreSpin`), which pulls from GitHub. To test changes that haven't been pushed yet, use the local marketplace:
+The primary distribution channel is the Claude Code plugin marketplace (`/plugin install LibreSpin/LibreSpin`), which pulls from GitHub. To test local changes, use the gitignored `marketplace.local.json` which points directly to the repo on disk — no GitHub round-trips, no version caching.
 
-**Setup (one-time):** `local-marketplace/` is gitignored and already exists in the repo.
-
-**Add the local marketplace to Claude Code:**
+**Add the local marketplace (one-time setup per machine):**
 ```
-/plugin marketplace add /home/william/repo/LibreSpin/LibreSpin/local-marketplace
+/plugin marketplace add /home/william/repo/LibreSpin/LibreSpin
 ```
-> Claude Code appends `.claude-plugin/marketplace.json` to whatever path you give it. The marketplace.json uses `"source": "./librespin"` — a symlink inside `local-marketplace/` that points to the repo root. Direct `../` paths are not allowed by the schema; the symlink is the workaround.
 
-**Install from local marketplace:**
+**Install the plugin:**
 ```
 /plugin install librespin
 ```
-Claude Code will resolve `"source": "../.."` relative to `local-marketplace/.claude-plugin/`, landing at the repo root.
+
+**After any skill change:**
+```
+/reload-plugins
+```
+Skills always reflect the current working tree — switch branches, make edits, reload.
 
 **Remove when done:**
 ```
-/plugin marketplace remove librespin-local
+/plugin marketplace remove librespin
 /plugin uninstall librespin
 ```
 
-**Why not edit `.claude-plugin/marketplace.json` directly?** That file points to the GitHub URL for production use. Editing it risks accidentally pushing a local path to GitHub. The gitignored `local-marketplace/` keeps the two concerns separate.
+`marketplace.json` uses `"source": "./"` which resolves to the repo root in both local and GitHub contexts — one file works for both dev and production.
 
-**CRITICAL — bump version after every skill change:** Claude Code caches plugins by version. If you add, rename, or remove a skill without bumping `.claude-plugin/plugin.json` version, the next `/plugin install` will serve the stale cache and the skill will not appear. After any change to `skills/`:
-
-```bash
-# Bump patch version in .claude-plugin/plugin.json, then:
-# Exit and restart Claude Code — new version is picked up on restart.
-# (No uninstall needed for local marketplace; restart suffices.)
-```
-
-Failure to bump → skills silently missing. This has caused issues twice.
+**CRITICAL — bump version for GitHub installs:** When releasing to GitHub, bump the version in `.claude-plugin/plugin.json` after any skill change. Claude Code caches GitHub plugins by version — stale cache = skills silently missing. Local installs read directly from disk so no bump is needed during development.
 
 <!-- GSD:workflow-start source:GSD defaults -->
 ## GSD Workflow Enforcement
