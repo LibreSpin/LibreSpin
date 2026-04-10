@@ -2720,10 +2720,9 @@ Note: Cross-concept comparison is generated in Phase 1 (comparison-matrix.md) wh
 
 Load confidence threshold from librespin-concept-config.yaml:
 
-```javascript
-const config = yaml.load(fs.readFileSync('.librespin/config.yaml', 'utf8'));
-const confidenceThreshold = config.confidence_threshold || 80;
-```
+- Read `.librespin/config.yaml` and extract `confidence_threshold` field.
+- Default to `80` if field is absent.
+- Store as `confidenceThreshold` for use throughout this phase.
 
 ### INPUT LOADING
 
@@ -2731,76 +2730,17 @@ const confidenceThreshold = config.confidence_threshold || 80;
 
 Read `.librespin/03-validation/validation-summary.md` to identify which concepts passed validation (confidence ≥ threshold or user-approved).
 
-```javascript
-// Extract validated concepts from Phase 1 validation-summary.md
-// Parse the "Validated Concepts" section to get concept names
-const validationSummaryPath = '.librespin/03-validation/validation-summary.md';
-const validationSummary = fs.readFileSync(validationSummaryPath, 'utf-8');
-
-// Extract concept names from validated concepts table (status: passed or approved)
-const validatedConcepts = [];  // Array of concept name strings
-const conceptTableMatch = validationSummary.match(/## Validated Concepts[\s\S]*?\n\n/);
-if (conceptTableMatch) {
-  const lines = conceptTableMatch[0].split('\n').filter(l => l.startsWith('|') && !l.includes('---'));
-  for (const line of lines.slice(1)) {  // Skip header
-    const cols = line.split('|').map(c => c.trim()).filter(c => c);
-    if (cols.length >= 2 && (cols[1] === 'passed' || cols[1] === 'approved')) {
-      validatedConcepts.push(cols[0]);  // Concept name
-    }
-  }
-}
-
-// For each validated concept, check if BOM exists (using slugified name)
-for (const conceptName of validatedConcepts) {
-  const conceptSlug = conceptName.toLowerCase().replace(/\s+/g, '-');
-  const bomPath = `.librespin/04-bom/bom-${conceptSlug}.md`;
-  if (!fs.existsSync(bomPath)) {
-    console.error(`ERROR: Missing BOM file for concept "${conceptName}": ${bomPath}`);
-    console.error('Run Phase 2 (Component Research) first.');
-    process.exit(1);
-  }
-}
-```
+- Read `.librespin/03-validation/validation-summary.md` and locate the "## Validated Concepts" table.
+- Extract concept names where status is `passed` or `approved`.
+- For each validated concept, slugify the name (lowercase, spaces to hyphens) and verify `.librespin/04-bom/bom-{slug}.md` exists.
+- If any BOM file is missing: STOP with error "Missing BOM file for concept '{name}'. Run Phase 2 (Component Research) first."
 
 **2. Load requirements from Phase 1:**
 
-```javascript
-const requirementsPath = '.librespin/01-requirements/requirements.yaml';
-if (!fs.existsSync(requirementsPath)) {
-  console.error('ERROR: Requirements file not found:', requirementsPath);
-  console.error('Run Phase 1 (Requirements Gathering) first.');
-  process.exit(1);
-}
-
-const requirements = yaml.load(fs.readFileSync(requirementsPath, 'utf8'), {
-  schema: yaml.FAILSAFE_SCHEMA
-});
-
-// Extract requirements with priority categorization
-const reqsList = [];
-for (const [category, items] of Object.entries(requirements)) {
-  if (category === 'schema_version' || category === 'success_criteria') continue;
-
-  // Determine priority based on category name or metadata
-  let priority = 'Important';  // Default
-  if (category.toLowerCase().includes('critical') || category === 'application') {
-    priority = 'Critical';
-  } else if (category.toLowerCase().includes('nice') || category === 'compliance') {
-    priority = 'Nice-to-have';
-  }
-
-  for (const [reqId, reqText] of Object.entries(items)) {
-    reqsList.push({
-      id: reqId,
-      description: reqText,
-      priority: priority,
-      category: category
-    });
-  }
-}
-
-console.log(`Loaded ${reqsList.length} requirements from Phase 1`);
-```
+- If `.librespin/01-requirements/requirements.yaml` does not exist: STOP with error "Requirements file not found. Run Phase 1 (Requirements Gathering) first."
+- Parse the YAML file; skip keys `schema_version` and `success_criteria`.
+- Assign priority to each category: categories containing "critical" or named "application" → `Critical`; containing "nice" or named "compliance" → `Nice-to-have`; all others → `Important` (default).
+- Flatten all requirements into a list with fields: `id`, `description`, `priority`, `category`.
 
 ### BLOCK DIAGRAM GENERATION
 
@@ -2817,144 +2757,21 @@ For each validated concept, generate component-level ASCII block diagram.
 
 **Implementation:**
 
-```javascript
-function generateBlockDiagram(conceptName, bomPath) {
-  // 1. Parse BOM to extract components
-  const bomContent = fs.readFileSync(bomPath, 'utf8');
-  const components = parseBomComponents(bomContent);
-
-  if (components.length === 0) {
-    console.warn(`WARNING: Empty BOM for concept "${conceptName}". Generating minimal diagram.`);
-    return generateMinimalDiagram(conceptName);
-  }
-
-  if (components.length > 20) {
-    console.warn(`WARNING: Concept "${conceptName}" has ${components.length} components.`);
-    console.warn('Consider splitting into subsystem diagrams for clarity.');
-  }
-
-  // 2. Group components by function
-  const groups = {
-    power: components.filter(c => c.category.toLowerCase().includes('power')),
-    processing: components.filter(c => c.category.toLowerCase().includes('mcu') ||
-                                       c.category.toLowerCase().includes('processor')),
-    communication: components.filter(c => c.category.toLowerCase().includes('wireless') ||
-                                          c.category.toLowerCase().includes('comms')),
-    sensors: components.filter(c => c.category.toLowerCase().includes('sensor')),
-    io: components.filter(c => c.category.toLowerCase().includes('interface') ||
-                               c.category.toLowerCase().includes('display')),
-    passives: components.filter(c => c.category.toLowerCase().includes('passive'))
-  };
-
-  // 3. Generate ASCII diagram following conventions
-  let diagram = `Block Diagram: ${conceptName}\n`;
-  diagram += '='.repeat(50) + '\n\n';
-
-  // Power section (top)
-  if (groups.power.length > 0) {
-    diagram += generatePowerSection(groups.power);
-  }
-
-  // Processing and communication (middle)
-  diagram += generateProcessingSection(groups.processing, groups.communication, groups.sensors, groups.io);
-
-  // Legend
-  diagram += '\n\nLegend:\n';
-  diagram += '  -----> : Signal flow (unidirectional)\n';
-  diagram += '  <----> : Bidirectional data\n';
-  diagram += '  (3.3V) : Power rail annotation\n';
-
-  return diagram;
-}
-
-function parseBomComponents(bomContent) {
-  const components = [];
-  const lines = bomContent.split('\n');
-  let inTable = false;
-
-  for (const line of lines) {
-    if (line.startsWith('|') && line.includes('Category')) {
-      inTable = true;
-      continue;
-    }
-    if (inTable && line.startsWith('|---')) continue;
-    if (inTable && line.startsWith('|')) {
-      const parts = line.split('|').map(p => p.trim()).filter(p => p);
-      if (parts.length >= 4) {
-        components.push({
-          category: parts[0],
-          mpn: parts[1],
-          manufacturer: parts[2],
-          description: parts[3]
-        });
-      }
-    }
-  }
-
-  return components;
-}
-
-function generatePowerSection(powerComponents) {
-  if (powerComponents.length === 0) return '';
-
-  let section = '+---------------+\n';
-  section += '|   Power Input |\n';
-  section += '|   (USB/Batt)  |\n';
-  section += '+-------+-------+\n';
-  section += '        |\n';
-  section += '        v 5V/Batt\n';
-
-  for (const comp of powerComponents) {
-    const abbrev = abbreviateMPN(comp.mpn);
-    section += `+-------+-------+\n`;
-    section += `|   ${abbrev.padEnd(11)} |-----(3.3V)----+\n`;
-    section += `| ${comp.category.substring(0, 11).padEnd(11)} |               |\n`;
-    section += `+---------------+               |\n`;
-    section += '                                v\n';
-  }
-
-  return section;
-}
-
-function abbreviateMPN(mpn) {
-  // Extract key identifier from MPN
-  // E.g., "STM32L476RGT6" -> "STM32L4"
-  //       "nRF52832-QFAA" -> "nRF52832"
-  //       "TPS563200DDCR" -> "TPS563200"
-
-  if (mpn.startsWith('STM32')) {
-    return mpn.substring(0, 7);  // "STM32L4"
-  }
-  if (mpn.startsWith('nRF')) {
-    const match = mpn.match(/nRF\d+/);
-    return match ? match[0] : mpn.substring(0, 10);
-  }
-  if (mpn.length > 12) {
-    return mpn.substring(0, 10);
-  }
-  return mpn;
-}
-```
+- Parse the BOM table from the BOM file (rows under the `Category` header column).
+- If BOM is empty: generate a minimal diagram showing only the concept name box.
+- If BOM has >20 components: warn "Consider splitting into subsystem diagrams for clarity."
+- Group components by category: `power` (contains "power"), `processing` (contains "mcu" or "processor"), `communication` (contains "wireless" or "comms"), `sensors` (contains "sensor"), `io` (contains "interface" or "display"), `passives` (contains "passive").
+- Draw power section at the top (power input → regulator boxes with voltage rail annotations).
+- Draw processing, communication, sensors, and I/O in the middle following left-to-right signal flow.
+- Abbreviate MPN labels: STM32* → first 7 chars; nRF* → `nRF\d+` match; >12 chars → first 10 chars; otherwise as-is.
+- Append a legend: `----->` = signal flow, `<---->` = bidirectional, `(3.3V)` = power rail.
+- Target 20–40 diagram lines; split into subsections if larger.
 
 **Component Summary Table:**
 
 After each diagram, include table linking diagram blocks to BOM references:
 
-```javascript
-function generateComponentSummary(components) {
-  let table = '\n## Component Summary\n\n';
-  table += '| Ref | Component | MPN | Function |\n';
-  table += '|-----|-----------|-----|----------|\n';
-
-  components.forEach((comp, idx) => {
-    const ref = `U${idx + 1}`;  // Simple sequential reference designators
-    const abbrev = abbreviateMPN(comp.mpn);
-    table += `| ${ref} | ${comp.category} | ${abbrev} | ${comp.description} |\n`;
-  });
-
-  return table;
-}
-```
+After the diagram, generate a component summary table with columns: `Ref | Component | MPN | Function`. Assign sequential reference designators (`U1`, `U2`, …). Use abbreviated MPN labels matching the diagram boxes.
 
 **Error Handling:**
 - Missing BOM file: Report error, skip concept (checked in INPUT LOADING)
@@ -2967,93 +2784,18 @@ For each validated concept, create requirements traceability matrix mapping requ
 
 **Traceability Matrix Structure (from 07-RESEARCH.md Pattern 2):**
 
-```javascript
-function generateTraceabilityMatrix(conceptName, requirements, components) {
-  let matrix = '\n## Specification Gap Analysis\n\n';
-  matrix += '| Req ID | Requirement | Priority | Addressed By | Status | Score |\n';
-  matrix += '|--------|-------------|----------|--------------|--------|-------|\n';
+Generate a traceability matrix table: `Req ID | Requirement | Priority | Addressed By | Status | Score`.
 
-  const componentMap = mapRequirementsToComponents(requirements, components);
+For each requirement, identify addressing components by matching keywords:
+- `voltage` or `power` in requirement → power/regulator components
+- `wireless`, `ble`, or `wifi` → wireless/comms components
+- `temperature`, `humidity`, or `sensor` → sensor components
+- `processing` or `computation` → MCU/processor components
 
-  requirements.forEach(req => {
-    const addressing = componentMap[req.id] || { components: '-', status: 'Not Addressed' };
-    const score = { 'Full': '100%', 'Partial': '50%', 'Not Addressed': '0%' }[addressing.status];
-
-    matrix += `| ${req.id} | ${req.description} | ${req.priority} | `;
-    matrix += `${addressing.components} | ${addressing.status} | ${score} |\n`;
-  });
-
-  return matrix;
-}
-
-function mapRequirementsToComponents(requirements, components) {
-  // Map each requirement to component(s) that address it
-  // This requires analyzing requirement text and component descriptions
-
-  const componentMap = {};
-
-  requirements.forEach(req => {
-    const reqLower = req.description.toLowerCase();
-    const addressing = [];
-
-    // Check each component for relevance to requirement
-    components.forEach(comp => {
-      const compLower = comp.description.toLowerCase();
-      const categoryLower = comp.category.toLowerCase();
-
-      // Example heuristics (expand based on domain):
-      // Power requirements
-      if (reqLower.includes('voltage') || reqLower.includes('power')) {
-        if (categoryLower.includes('power') || categoryLower.includes('regulator')) {
-          addressing.push(comp.mpn);
-        }
-      }
-
-      // Communication requirements
-      if (reqLower.includes('wireless') || reqLower.includes('ble') || reqLower.includes('wifi')) {
-        if (categoryLower.includes('wireless') || categoryLower.includes('comms')) {
-          addressing.push(comp.mpn);
-        }
-      }
-
-      // Sensor requirements
-      if (reqLower.includes('temperature') || reqLower.includes('humidity') || reqLower.includes('sensor')) {
-        if (categoryLower.includes('sensor')) {
-          addressing.push(comp.mpn);
-        }
-      }
-
-      // Processing requirements
-      if (reqLower.includes('processing') || reqLower.includes('computation')) {
-        if (categoryLower.includes('mcu') || categoryLower.includes('processor')) {
-          addressing.push(comp.mpn);
-        }
-      }
-    });
-
-    // Determine status based on addressing components
-    if (addressing.length === 0) {
-      componentMap[req.id] = {
-        components: '-',
-        status: 'Not Addressed'
-      };
-    } else {
-      // Determine if Full or Partial based on requirement specifics
-      // Default to Partial when in doubt (per 07-RESEARCH.md Pitfall 3)
-      componentMap[req.id] = {
-        components: addressing.join(', '),
-        status: 'Partial',  // Conservative default
-        partialReason: 'Component contributes but may not fully satisfy requirement'
-      };
-
-      // Upgrade to Full if component clearly satisfies requirement
-      // (This requires domain-specific logic)
-    }
-  });
-
-  return componentMap;
-}
-```
+Assign status and score:
+- Components found and clearly satisfy requirement → `Full` (100%)
+- Components found but partially satisfy → `Partial` (50%) — use as conservative default when in doubt
+- No components found → `Not Addressed` (0%)
 
 **Addressed Status Definitions (from 07-CONTEXT.md):**
 - **Full (100%):** Component(s) completely satisfy the requirement
@@ -3073,83 +2815,26 @@ Calculate overall specification coverage using priority weights.
 
 **Implementation (from 07-RESEARCH.md Pattern 3):**
 
-```javascript
-function calculateWeightedCoverage(requirements, componentMap) {
-  const weights = {
-    'Critical': 0.50,
-    'Important': 0.30,
-    'Nice-to-have': 0.20
-  };
+**Scoring:** `Full` = 100 pts, `Partial` = 50 pts, `Not Addressed` = 0 pts.
 
-  const scores = {
-    'Full': 100,
-    'Partial': 50,
-    'Not Addressed': 0
-  };
+**Per-tier coverage:** sum of requirement scores ÷ (count × 100). Empty tier = 100% (no requirements = no gaps).
 
-  // Group requirements by priority
-  const groups = {
-    'Critical': [],
-    'Important': [],
-    'Nice-to-have': []
-  };
-
-  requirements.forEach(req => {
-    const addressing = componentMap[req.id];
-    const score = scores[addressing.status];
-    groups[req.priority].push({ req, score });
-  });
-
-  // Calculate per-tier coverage
-  const tierCoverage = {};
-  for (const [priority, reqs] of Object.entries(groups)) {
-    if (reqs.length === 0) {
-      // Empty tier = 100% covered (no requirements = no gaps)
-      tierCoverage[priority] = 1.0;
-      continue;
-    }
-    const totalPossible = reqs.length * 100;
-    const actualScore = reqs.reduce((sum, r) => sum + r.score, 0);
-    tierCoverage[priority] = actualScore / totalPossible;
-  }
-
-  // Weighted sum
-  const overall =
-    tierCoverage['Critical'] * weights['Critical'] +
-    tierCoverage['Important'] * weights['Important'] +
-    tierCoverage['Nice-to-have'] * weights['Nice-to-have'];
-
-  return {
-    overall: Math.round(overall * 100),  // percentage
-    byTier: {
-      'Critical': Math.round(tierCoverage['Critical'] * 100),
-      'Important': Math.round(tierCoverage['Important'] * 100),
-      'Nice-to-have': Math.round(tierCoverage['Nice-to-have'] * 100)
-    },
-    passes: overall >= 0.80,
-    threshold: 80
-  };
-}
-```
+**Weighted overall:** `(Critical × 0.50) + (Important × 0.30) + (Nice-to-have × 0.20)`. Result rounded to nearest integer. Passes if ≥ 80%.
 
 **Coverage Summary Format:**
 
-```javascript
-function generateCoverageSummary(coverage, gapCount) {
-  let summary = '\n## Coverage Summary\n\n';
-  summary += `**Overall Coverage:** ${coverage.overall}%\n`;
-  summary += `**Status:** ${coverage.passes ? 'PASS' : 'FAIL'} (threshold: ${coverage.threshold}%)\n\n`;
+**Coverage Summary format:**
+```
+**Overall Coverage:** {X}%
+**Status:** PASS|FAIL (threshold: 80%)
 
-  summary += '| Priority | Coverage |\n';
-  summary += '|----------|----------|\n';
-  summary += `| Critical | ${coverage.byTier['Critical']}% |\n`;
-  summary += `| Important | ${coverage.byTier['Important']}% |\n`;
-  summary += `| Nice-to-have | ${coverage.byTier['Nice-to-have']}% |\n\n`;
+| Priority     | Coverage |
+|--------------|----------|
+| Critical     | {X}%     |
+| Important    | {X}%     |
+| Nice-to-have | {X}%     |
 
-  summary += `**Gaps Identified:** ${gapCount} requirement(s) not fully addressed\n`;
-
-  return summary;
-}
+**Gaps Identified:** {N} requirement(s) not fully addressed
 ```
 
 ### COVERAGE COMPARISON VIEW
@@ -3158,44 +2843,12 @@ Generate single comparison table showing all concepts for decision-making.
 
 **Format (from 07-RESEARCH.md Pattern 4):**
 
-```javascript
-function generateComparisonTable(conceptAnalyses) {
-  let comparison = '# Coverage Comparison\n\n';
-  comparison += '| Concept | Coverage | Critical | Important | Nice | Gaps | Est. Cost | Status |\n';
-  comparison += '|---------|----------|----------|-----------|------|------|-----------|--------|\n';
+Generate a comparison table: `Concept | Coverage | Critical | Important | Nice | Gaps | Est. Cost | Status`.
 
-  conceptAnalyses.forEach(analysis => {
-    const status = analysis.coverage.overall >= 80 ? 'PASS' : 'FAIL';
-    comparison += `| ${analysis.conceptName} | ${analysis.coverage.overall}% | `;
-    comparison += `${analysis.coverage.byTier['Critical']}% | `;
-    comparison += `${analysis.coverage.byTier['Important']}% | `;
-    comparison += `${analysis.coverage.byTier['Nice-to-have']}% | `;
-    comparison += `${analysis.gapCount} | $${analysis.bomCost.toFixed(2)} | ${status} |\n`;
-  });
-
-  comparison += '\n### Legend\n';
-  comparison += '- **Coverage:** Weighted overall coverage (50/30/20)\n';
-  comparison += '- **Critical/Important/Nice:** Per-tier coverage percentages\n';
-  comparison += '- **Gaps:** Count of Not Addressed requirements\n';
-  comparison += '- **Status:** PASS (>=80%) or FAIL (<80%)\n\n';
-
-  // Recommendation
-  const passingConcepts = conceptAnalyses.filter(a => a.coverage.overall >= 80);
-  if (passingConcepts.length > 0) {
-    const best = passingConcepts.sort((a, b) => b.coverage.overall - a.coverage.overall)[0];
-    comparison += '### Recommendation\n';
-    comparison += `**${best.conceptName}** recommended for highest coverage (${best.coverage.overall}%) `;
-    comparison += `with ${best.gapCount} gap(s).\n`;
-  } else {
-    comparison += '### Note\n';
-    comparison += 'All concepts below 80% threshold. Review gap suggestions and consider:\n';
-    comparison += '- Relaxing requirements that may be overly strict\n';
-    comparison += '- Proceeding with best-available concept and addressing gaps in Phase 2 (Refinement)\n';
-  }
-
-  return comparison;
-}
-```
+- Status = `PASS` if coverage ≥ 80%, else `FAIL`.
+- Legend: Coverage = weighted overall (50/30/20); Gaps = count of Not Addressed requirements.
+- If ≥1 concept passes: add `### Recommendation` naming the highest-coverage passing concept.
+- If all fail: add `### Note` suggesting relaxing requirements or proceeding with best-available concept.
 
 ### GAP RESOLUTION SUGGESTIONS
 
@@ -3203,72 +2856,17 @@ For each Not Addressed or Partial requirement, provide actionable suggestions.
 
 **Format (from 07-RESEARCH.md Pattern 5):**
 
-```javascript
-function generateGapSuggestions(requirements, componentMap) {
-  const gaps = requirements.filter(req => {
-    const addressing = componentMap[req.id];
-    return addressing.status !== 'Full';
-  });
+For each requirement with status `Partial` or `Not Addressed`, output a subsection `### {id}: {description} ({status})`:
 
-  if (gaps.length === 0) {
-    return '\n## Gaps and Suggestions\n\nNo gaps identified - all requirements fully addressed.\n';
-  }
+- **Gap:** Describe what is missing or partially satisfied.
+- **Impact:** Requirement not satisfied / partially satisfied; may need enhancement.
+- **Suggestions:** 2–4 actionable items based on requirement type:
+  - power/voltage → add regulator or PMIC; review power budget; revisit spec
+  - communication/interface → add comms module; use MCU with integrated peripheral; consider alternative protocol
+  - sensor/measurement → add sensor to BOM; verify MCU ADC/interface; consider multi-sensor module
+  - generic → add addressing component; enhance existing component; revisit requirement necessity; defer to Phase 2
 
-  let suggestions = '\n## Gaps and Suggestions\n\n';
-
-  gaps.forEach(req => {
-    const addressing = componentMap[req.id];
-    suggestions += `### ${req.id}: ${req.description} (${addressing.status})\n\n`;
-
-    // Describe the gap specifically
-    if (addressing.status === 'Not Addressed') {
-      suggestions += `**Gap:** No component currently addresses this requirement.\n`;
-      suggestions += `**Impact:** Requirement not satisfied in current design.\n`;
-    } else {
-      suggestions += `**Gap:** ${addressing.partialReason || 'Component partially satisfies requirement.'}\n`;
-      suggestions += `**Impact:** Requirement partially satisfied; may need enhancement.\n`;
-    }
-
-    // Provide actionable suggestions
-    suggestions += '**Suggestions:**\n';
-    suggestions += generateSuggestionsForRequirement(req, addressing);
-    suggestions += '\n';
-  });
-
-  return suggestions;
-}
-
-function generateSuggestionsForRequirement(req, addressing) {
-  // Generate 2-3 actionable suggestions based on requirement type
-  // This is domain-specific and requires reasoning about the requirement
-
-  let suggestions = '';
-  const reqLower = req.description.toLowerCase();
-
-  // Example suggestions based on common requirement patterns
-  if (reqLower.includes('power') || reqLower.includes('voltage')) {
-    suggestions += '1. Add appropriate voltage regulator or power management IC\n';
-    suggestions += '2. Review power budget and consider higher-capacity power supply\n';
-    suggestions += '3. Revisit requirement to confirm if voltage spec is truly needed\n';
-  } else if (reqLower.includes('communication') || reqLower.includes('interface')) {
-    suggestions += '1. Add dedicated communication module (e.g., BLE, WiFi, LoRa)\n';
-    suggestions += '2. Use MCU with integrated communication peripherals\n';
-    suggestions += '3. Consider alternative communication protocol if requirement allows\n';
-  } else if (reqLower.includes('sensor') || reqLower.includes('measurement')) {
-    suggestions += '1. Add specific sensor component to BOM\n';
-    suggestions += '2. Verify MCU has appropriate ADC/interface for sensor\n';
-    suggestions += '3. Consider multi-sensor module if measuring multiple parameters\n';
-  } else {
-    // Generic suggestions when specific domain pattern not matched
-    suggestions += '1. Add component to address this requirement\n';
-    suggestions += '2. Enhance existing component capability if possible\n';
-    suggestions += '3. Revisit requirement to confirm necessity and specifications\n';
-    suggestions += '4. Defer to Phase 2 (Refinement) for detailed resolution\n';
-  }
-
-  return suggestions;
-}
-```
+If no gaps: output "No gaps identified - all requirements fully addressed."
 
 **Key Principles (from 07-RESEARCH.md):**
 - Be specific about the gap (what's missing, what's the shortfall)
@@ -3325,11 +2923,9 @@ File structure:
 
 **Update state file** `.librespin/state.md` — set `phase` to `5-concept-generation`:
 
-```javascript
-const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
-const updatedState = existingState.replace(/^phase: .+$/m, `phase: '5-concept-generation'`);
-fs.writeFileSync('.librespin/state.md', updatedState);
-```
+- Read `.librespin/state.md`.
+- Replace the `phase: ...` frontmatter field value with `'5-concept-generation'`.
+- Write the updated content back to `.librespin/state.md`.
 
 ## PHASE 6: SELF-CRITIQUE & REFINEMENT
 
