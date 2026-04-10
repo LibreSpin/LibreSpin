@@ -276,45 +276,21 @@ If INPUT_FILE parameter is not "interactive" and ends with .yaml or .yml:
 
 **1. Load and parse YAML securely:**
 
-```javascript
-const yaml = require('js-yaml');
-const fs = require('fs');
-
-try {
-  const fileContents = fs.readFileSync(INPUT_FILE, 'utf8');
-
-  // SECURITY: Use FAILSAFE_SCHEMA (strings, arrays, plain objects only)
-  // This prevents type coercion attacks (CVE-2022-1471) and arbitrary deserialization
-  const requirements = yaml.load(fileContents, {
-    schema: yaml.FAILSAFE_SCHEMA  // No type coercion, no code execution
-  });
-
-  // Validate schema_version field
-  if (!requirements.schema_version) {
-    throw new Error('Missing schema_version field. See template: .claude/librespin/templates/requirements.yaml');
-  }
-  if (requirements.schema_version !== 1) {
-    throw new Error(`Unsupported schema_version: ${requirements.schema_version}. Expected: 1`);
-  }
-
-} catch (e) {
-  console.error(`Failed to load requirements from ${INPUT_FILE}:`);
-  console.error(e.message);
-  console.error('\nSee valid format: .claude/librespin/templates/requirements.yaml');
-  process.exit(1);
-}
-```
+- Read the file at `INPUT_FILE` as plain text.
+- Parse with FAILSAFE_SCHEMA (strings, arrays, plain objects only — no type coercion, no code execution). This prevents CVE-2022-1471-style deserialization attacks.
+- If `schema_version` field is missing, stop and display: "Missing schema_version field. See template: .claude/librespin/templates/requirements.yaml"
+- If `schema_version` is not `1`, stop and display: "Unsupported schema_version: {value}. Expected: 1"
+- On any parse error, stop and display the error message plus: "See valid format: .claude/librespin/templates/requirements.yaml"
 
 **2. Calculate completeness of loaded YAML:**
 
-Use `calculateCompletenessScore` function (implemented below in COMPLETENESS SCORING section) to evaluate loaded requirements.
+Apply the completeness scoring rules from the COMPLETENESS SCORING section below. Display the result:
 
-```javascript
-const scoreResult = calculateCompletenessScore(requirements);
-console.log(`Loaded requirements score: ${scoreResult.score}/100`);
-console.log(`  Critical: ${scoreResult.breakdown.critical}/50`);
-console.log(`  Important: ${scoreResult.breakdown.important}/30`);
-console.log(`  Nice-to-have: ${scoreResult.breakdown.niceToHave}/20`);
+```
+Loaded requirements score: {score}/100
+  Critical: {critical}/50
+  Important: {important}/30
+  Nice-to-have: {niceToHave}/20
 ```
 
 **3. Hybrid gap-filling mode:**
@@ -746,167 +722,40 @@ Missing important requirements:
 
 ### IMPLEMENTATION: calculateCompletenessScore
 
-**Function signature (conceptual):**
+**Field lists by category:**
 
-```javascript
-function calculateCompletenessScore(requirements) {
-  // Define field lists by category
-  const criticalFields = [
-    'project_name', 'use_case',
-    'environment.location', 'environment.temperature_min_c', 'environment.temperature_max_c',
-    'connectivity.primary', 'connectivity.region',
-    'connectivity.port_count', 'connectivity.hub_acceptable',
-    'power.source', 'power.battery_life_target'
-  ];
+Critical fields (11 total): `project_name`, `use_case`, `environment.location`, `environment.temperature_min_c`, `environment.temperature_max_c`, `connectivity.primary`, `connectivity.region`, `connectivity.port_count`, `connectivity.hub_acceptable`, `power.source`, `power.battery_life_target`
 
-  const importantFields = [
-    'sensors', 'hmi.buttons', 'hmi.leds', 'hmi.display',
-    'physical.max_pcb_size_mm', 'physical.enclosure'
-  ];
+Important fields (6 total): `sensors`, `hmi.buttons`, `hmi.leds`, `hmi.display`, `physical.max_pcb_size_mm`, `physical.enclosure`
 
-  const niceToHaveFields = [
-    'production.volume', 'production.bom_target_usd',
-    'compliance', 'lifecycle.years', 'preferences'
-  ];
+Nice-to-have fields (5 total): `production.volume`, `production.bom_target_usd`, `compliance`, `lifecycle.years`, `preferences`
 
-  // Count answered fields in each category
-  const answeredCritical = criticalFields.filter(field => isFieldAnswered(requirements, field)).length;
-  const answeredImportant = importantFields.filter(field => isFieldAnswered(requirements, field)).length;
-  const answeredNice = niceToHaveFields.filter(field => isFieldAnswered(requirements, field)).length;
+**A field is answered if** the value exists, is not null/empty string, and is not one of: "i don't know", "not specified", "n/a", "unknown", "tbd". Navigate nested paths using dot notation (e.g., `environment.location` → check `requirements.environment.location`).
 
-  // Calculate weighted score (50/30/20 allocation)
-  const criticalScore = (answeredCritical / criticalFields.length) * 50;
-  const importantScore = (answeredImportant / importantFields.length) * 30;
-  const niceScore = (answeredNice / niceToHaveFields.length) * 20;
+**Scoring formula:**
 
-  const totalScore = Math.round(criticalScore + importantScore + niceScore);
+- `criticalScore = (answeredCritical / 11) × 50`
+- `importantScore = (answeredImportant / 6) × 30`
+- `niceScore = (answeredNice / 5) × 20`
+- `totalScore = round(criticalScore + importantScore + niceScore)`
 
-  return {
-    score: totalScore,
-    breakdown: {
-      critical: Math.round(criticalScore),
-      important: Math.round(importantScore),
-      niceToHave: Math.round(niceScore)
-    },
-    counts: {
-      criticalAnswered: answeredCritical,
-      criticalTotal: criticalFields.length,
-      importantAnswered: answeredImportant,
-      importantTotal: importantFields.length,
-      niceAnswered: answeredNice,
-      niceTotal: niceToHaveFields.length
-    }
-  };
-}
+**Usage in agent flow — after Section 2 completion:**
 
-function isFieldAnswered(requirements, fieldPath) {
-  // Helper to check nested fields (e.g., "environment.location")
-  const value = getNestedField(requirements, fieldPath);
-
-  // Field is answered if:
-  // - Exists and not null/undefined
-  // - Not empty string
-  // - Not "I don't know" or similar non-answers
-  // - Not "NOT SPECIFIED" placeholder
-
-  if (value === null || value === undefined || value === '') {
-    return false;
-  }
-
-  const strValue = String(value).toLowerCase().trim();
-  const nonAnswers = ['i don\'t know', 'not specified', 'n/a', 'unknown', 'tbd'];
-
-  return !nonAnswers.includes(strValue);
-}
-
-function getNestedField(obj, path) {
-  // Navigate nested object paths: "environment.location" → obj.environment.location
-  return path.split('.').reduce((current, key) => current?.[key], obj);
-}
-```
-
-**Usage in agent flow:**
-
-After Section 2 completion:
-```javascript
-const scoreResult = calculateCompletenessScore(requirements);
-
-if (scoreResult.score < 70) {
-  console.log(`Completeness: ${scoreResult.score}/100`);
-  console.log(`  Critical: ${scoreResult.breakdown.critical}/50 (${scoreResult.counts.criticalAnswered}/${scoreResult.counts.criticalTotal} answered)`);
-  console.log(`  Important: ${scoreResult.breakdown.important}/30 (${scoreResult.counts.importantAnswered}/${scoreResult.counts.importantTotal} answered)`);
-  console.log(`  Nice-to-have: ${scoreResult.breakdown.niceToHave}/20 (${scoreResult.counts.niceAnswered}/${scoreResult.counts.niceTotal} answered)`);
-
-  // Identify and report gaps
-  reportMissingFields(requirements);
-
-  // Block progression
-  return; // Do not proceed to Phase 2
-}
-```
+- Calculate total score using the formula above.
+- If score < 70, display completeness breakdown and block progression:
+  - "Completeness: {score}/100"
+  - "  Critical: {critical}/50 ({answeredCritical}/11 answered)"
+  - "  Important: {important}/30 ({answeredImportant}/6 answered)"
+  - "  Nice-to-have: {niceToHave}/20 ({answeredNice}/5 answered)"
+- Then report missing fields and do not proceed to Phase 2.
 
 **Gap identification and reporting:**
 
-```javascript
-function reportMissingFields(requirements) {
-  const criticalFields = {
-    'connectivity.port_count': 'CRITICAL - needed for USB topology validation',
-    'connectivity.hub_acceptable': 'CRITICAL - needed for USB hub requirements'
-  };
-
-  const importantFields = {
-    'sensors': 'needed for component selection and I/O planning',
-    'hmi.buttons': 'needed for user interaction specification',
-    'hmi.leds': 'needed for user interaction specification',
-    'hmi.display': 'needed for user interaction specification',
-    'physical.max_pcb_size_mm': 'needed for component selection constraints',
-    'physical.enclosure': 'needed for environmental protection and mounting'
-  };
-
-  const missingCritical = [];
-  const missingImportant = [];
-
-  for (const [field, reason] of Object.entries(criticalFields)) {
-    if (!isFieldAnswered(requirements, field)) {
-      missingCritical.push({ field, reason });
-    }
-  }
-
-  for (const [field, reason] of Object.entries(importantFields)) {
-    if (!isFieldAnswered(requirements, field)) {
-      missingImportant.push({ field, reason });
-    }
-  }
-
-  if (missingCritical.length > 0) {
-    console.log('\nMissing CRITICAL requirements:');
-    missingCritical.forEach(m => {
-      const fieldName = m.field.split('.').pop();
-      console.log(`  - ${fieldName}: ${m.reason}`);
-    });
-  }
-
-  if (missingImportant.length > 0) {
-    console.log('\nMissing important requirements:');
-
-    // Group by category
-    const categories = {
-      'HMI': ['hmi.buttons', 'hmi.leds', 'hmi.display'],
-      'Physical': ['physical.max_pcb_size_mm', 'physical.enclosure'],
-      'Sensors': ['sensors']
-    };
-
-    for (const [category, fields] of Object.entries(categories)) {
-      const categoryMissing = missingImportant.filter(m => fields.includes(m.field));
-      if (categoryMissing.length > 0) {
-        const fieldNames = categoryMissing.map(m => m.field.split('.').pop()).join(', ');
-        const reason = categoryMissing[0].reason;
-        console.log(`  - ${category}: ${fieldNames} (${reason})`);
-      }
-    }
-  }
-}
-```
+- Check critical gap fields: `connectivity.port_count` (needed for USB topology validation), `connectivity.hub_acceptable` (needed for USB hub requirements). If missing, list under "Missing CRITICAL requirements:".
+- Check important gap fields: `sensors` (component selection and I/O planning), `hmi.buttons`, `hmi.leds`, `hmi.display` (user interaction specification), `physical.max_pcb_size_mm` (component selection constraints), `physical.enclosure` (environmental protection and mounting). If missing, group by category under "Missing important requirements:":
+  - HMI: list missing hmi.* fields
+  - Physical: list missing physical.* fields
+  - Sensors: list if missing
 
 **Threshold enforcement logic:**
 
@@ -1042,63 +891,36 @@ After requirements and success criteria collection complete:
 
 **1. Write requirements.yaml** to `.librespin/01-requirements/requirements.yaml`
 
-Use `yaml.dump()` to serialize requirements object:
-
-```javascript
-const yaml = require('js-yaml');
-const fs = require('fs');
-
-const requirementsYaml = yaml.dump(requirements, {
-  schema: yaml.FAILSAFE_SCHEMA,
-  lineWidth: -1  // Disable line wrapping
-});
-
-fs.writeFileSync('.librespin/01-requirements/requirements.yaml', requirementsYaml);
-```
+- Serialize the final requirements object to YAML format (no line wrapping).
+- Write to `.librespin/01-requirements/requirements.yaml`.
 
 **2. Create config file** `.librespin/config.yaml` (if not exists)
 
-```javascript
-const configPath = '.librespin/config.yaml';
-if (!fs.existsSync(configPath)) {
-  const defaultConfig = yaml.dump({
-    draft_count: 5,
-    iteration_limit: 5,
-    confidence_threshold: 80
-  });
-  fs.writeFileSync(configPath, defaultConfig);
-}
-```
+- If `.librespin/config.yaml` does not exist, create it with these defaults:
+  - `draft_count: 5`
+  - `iteration_limit: 5`
+  - `confidence_threshold: 80`
 
 **3. Update state file** `.librespin/state.md`
 
-Write with YAML frontmatter:
+Write a state file with YAML frontmatter followed by markdown content. Frontmatter fields:
+- `phase: '3-requirements-gathering'`
+- `completed: {ISO 8601 timestamp}`
+- `completeness_score: {score}`
+- `source: 'interactive'` (or `'yaml'` if loaded from file)
+- `schema_version: 1`
 
-```javascript
-const frontmatter = yaml.dump({
-  phase: '3-requirements-gathering',
-  completed: new Date().toISOString(),
-  completeness_score: scoreResult.score,
-  source: INPUT_FILE === 'interactive' ? 'interactive' : 'yaml',
-  schema_version: 1
-});
-
-const successCriteriaList = successCriteria.map(c => `- ${c}`).join('\n');
-
-const stateContent = `---
-${frontmatter.trim()}
----
-
+Body content:
+```
 # Requirements
 
-${requirementsYaml}
+{requirements YAML content}
 
 # Success Criteria
 
-${successCriteriaList}
-`;
-
-fs.writeFileSync('.librespin/state.md', stateContent);
+- {criterion 1}
+- {criterion 2}
+...
 ```
 
 **4. Display summary to user:**
@@ -1139,312 +961,91 @@ Generate diverse high-level architecture concepts at the conceptual level withou
 
 ### CONFIGURATION LOADING
 
-Load draft count from config file:
-
-```javascript
-const yaml = require('js-yaml');
-const fs = require('fs');
-
-// Read configuration
-const configPath = '.librespin/config.yaml';
-const config = yaml.load(fs.readFileSync(configPath, 'utf8'), {
-  schema: yaml.FAILSAFE_SCHEMA
-});
-
-// Validate draft_count
-const draftCount = config.draft_count;
-if (typeof draftCount !== 'number' || draftCount < 3 || draftCount > 10) {
-  throw new Error(`Invalid draft_count: ${draftCount}. Must be integer 3-10. Check ${configPath}`);
-}
-
-console.log(`Generating ${draftCount} architecture concepts...`);
-```
+Load draft count from `.librespin/config.yaml` (FAILSAFE_SCHEMA, no type coercion). Read `draft_count` field. If it is not an integer between 3 and 10 inclusive, stop with: "Invalid draft_count: {value}. Must be integer 3-10. Check .librespin/config.yaml". Display: "Generating {draftCount} architecture concepts..."
 
 ### REQUIREMENTS LOADING
 
-Load validated requirements from Phase 1:
-
-```javascript
-const requirementsPath = '.librespin/01-requirements/requirements.yaml';
-if (!fs.existsSync(requirementsPath)) {
-  throw new Error(`Requirements file not found: ${requirementsPath}. Run Phase 1 first.`);
-}
-
-const requirements = yaml.load(fs.readFileSync(requirementsPath, 'utf8'), {
-  schema: yaml.FAILSAFE_SCHEMA
-});
-
-// Parse domain indicators from requirements
-const domainIndicators = identifyDomain(requirements);
-console.log(`Detected domains: ${domainIndicators.join(', ') || 'generic'}`);
-```
+Load requirements from `.librespin/01-requirements/requirements.yaml` (FAILSAFE_SCHEMA). If the file does not exist, stop with: "Requirements file not found: .librespin/01-requirements/requirements.yaml. Run Phase 1 first." After loading, run domain detection (below) and display: "Detected domains: {list}" or "Detected domains: generic" if none found.
 
 ### DOMAIN DETECTION
 
-Identify application domain from requirements to inform concept generation:
+Identify application domain from `use_case` and `sensors` fields to inform concept generation:
 
-```javascript
-function identifyDomain(requirements) {
-  const domains = [];
-  const useCaseText = (requirements.use_case || '').toLowerCase();
-  const sensorsText = (JSON.stringify(requirements.sensors || [])).toLowerCase();
-
-  // Motor control domain
-  if (/motor|bldc|foc|trapezoidal|brushless|stepper/i.test(useCaseText)) {
-    domains.push('motor-control');
-  }
-
-  // IoT sensor domain
-  if (/iot|sensor network|wireless sensor|battery.*sensor/i.test(useCaseText)) {
-    domains.push('iot-sensor');
-  }
-
-  // Processing-intensive domain
-  if (/signal processing|high.*speed|parallel|real.*time|dsp/i.test(useCaseText)) {
-    domains.push('processing-intensive');
-  }
-
-  return domains;
-}
-```
+- Check `use_case` text (case-insensitive):
+  - Contains motor, bldc, foc, trapezoidal, brushless, or stepper → add domain `motor-control`
+  - Contains iot, sensor network, wireless sensor, or battery.*sensor → add domain `iot-sensor`
+  - Contains signal processing, high.*speed, parallel, real.*time, or dsp → add domain `processing-intensive`
+- Return all matched domains (empty = generic)
+- If `motor-control`: note "Consider FOC, trapezoidal, or hybrid architectures"
+- If `iot-sensor`: note "Consider centralized cloud, edge processing, or mesh topologies"
+- If `processing-intensive`: note "Consider MCU, DSP, FPGA, or hybrid processing"
 
 ### SEQUENTIAL GENERATION WITH DIVERSITY CHECKING
 
-Generate concepts one at a time, checking diversity after each:
+Generate concepts one at a time, checking diversity after each. `maxRetries = 3`.
 
-```javascript
-const concepts = [];
-const maxRetries = 3;
-
-for (let i = 0; i < draftCount; i++) {
-  let attempts = 0;
-  let newConcept = null;
-  let diversityResult = null;
-
-  while (attempts < maxRetries) {
-    // Generate concept with constraints
-    const prompt = buildConceptPrompt(requirements, domainIndicators, concepts, i);
-    newConcept = await generateConcept(prompt);
-
-    // Check diversity against all previous concepts
-    diversityResult = checkDiversity(newConcept, concepts);
-
-    if (diversityResult.isDiverse || concepts.length === 0) {
-      // Document differentiation
-      newConcept.differentiation = diversityResult.differences || [];
-      break;
-    }
-
-    attempts++;
-    console.log(`Concept ${i+1} too similar (attempt ${attempts}/${maxRetries}). Retrying...`);
-  }
-
-  if (newConcept && (diversityResult.isDiverse || concepts.length === 0)) {
-    concepts.push(newConcept);
-    console.log(`✓ Concept ${i+1}: ${newConcept.name}`);
-  } else {
-    console.warn(`Could not generate diverse concept ${i+1} after ${maxRetries} attempts.`);
-    console.warn(`Reducing count from ${draftCount} to ${concepts.length}`);
-    break; // Reduce count rather than forcing similarity
-  }
-}
-
-console.log(`\nGenerated ${concepts.length} diverse concepts.`);
-```
+- For each concept slot (1 through `draftCount`):
+  - Generate a concept using the generation strategy below (with requirements, detected domains, and all previously accepted concepts passed as context).
+  - Run diversity check against all previously accepted concepts (see DIVERSITY CHECKING ALGORITHM).
+  - If the first concept (no prior concepts), accept immediately and record its differentiation as empty.
+  - If the concept is diverse (differs in ≥1 dimension from all prior concepts), record the differing dimensions as its `differentiation` and accept it.
+  - If not diverse, retry up to `maxRetries` times, displaying: "Concept {N} too similar (attempt {attempt}/{maxRetries}). Retrying..."
+  - After `maxRetries` failed attempts, stop generating further concepts and display: "Could not generate diverse concept {N} after {maxRetries} attempts. Reducing count from {draftCount} to {current count}."
+  - Display "✓ Concept {N}: {name}" after each accepted concept.
+- After all slots processed, display: "Generated {count} diverse concepts."
 
 ### DIVERSITY CHECKING ALGORITHM
 
 Compare new concept against all previous concepts across 4 dimensions:
 
-```javascript
-function checkDiversity(newConcept, existingConcepts) {
-  if (existingConcepts.length === 0) {
-    return { isDiverse: true, differences: [] };
-  }
+1. **Processing architecture** (MCU / FPGA / DSP / ASIC) — does `processing` field differ?
+2. **System topology** (centralized / distributed / modular) — does `topology` field differ?
+3. **Communication approach** (wired / wireless / serial / parallel) — does `communication` field differ?
+4. **Power architecture** (battery/mains, LDO/switching) — does `power` field differ?
 
-  const allDifferences = [];
-
-  for (const existing of existingConcepts) {
-    const differences = [];
-
-    // Dimension 1: Processing architecture (MCU/FPGA/DSP/ASIC)
-    if (newConcept.processing !== existing.processing) {
-      differences.push(`Processing: ${newConcept.processing} vs ${existing.processing}`);
-    }
-
-    // Dimension 2: System topology (centralized/distributed/modular)
-    if (newConcept.topology !== existing.topology) {
-      differences.push(`Topology: ${newConcept.topology} vs ${existing.topology}`);
-    }
-
-    // Dimension 3: Communication approach (wired/wireless/serial/parallel)
-    if (newConcept.communication !== existing.communication) {
-      differences.push(`Communication: ${newConcept.communication} vs ${existing.communication}`);
-    }
-
-    // Dimension 4: Power architecture (battery/mains, LDO/switching)
-    if (newConcept.power !== existing.power) {
-      differences.push(`Power: ${newConcept.power} vs ${existing.power}`);
-    }
-
-    // Diversity threshold: Must differ in ≥1 major dimension (moderate standard)
-    if (differences.length < 1) {
-      return {
-        isDiverse: false,
-        reason: `Too similar to ${existing.name}`,
-        differences: []
-      };
-    }
-
-    allDifferences.push(...differences);
-  }
-
-  return {
-    isDiverse: true,
-    differences: allDifferences
-  };
-}
-```
+**Diversity threshold:** A new concept is diverse if it differs from every existing concept in at least 1 of the 4 dimensions. If it matches an existing concept on all 4 dimensions, it is not diverse. Collect all dimension differences across all pairwise comparisons and attach as `differentiation` list (e.g., "Processing: Cortex-M4 MCU vs FPGA").
 
 ### CONCEPT GENERATION STRATEGY
 
-Build prompt for concept generation with diversity and extreme constraints:
+When generating each concept, use the following constraints and strategy:
 
-```javascript
-function buildConceptPrompt(requirements, domains, existingConcepts, conceptIndex) {
-  let prompt = `Generate a hardware architecture concept meeting these requirements:\n`;
-  prompt += `${JSON.stringify(requirements, null, 2)}\n\n`;
-
-  // Domain-specific patterns
-  if (domains.includes('motor-control')) {
-    prompt += `Domain: Motor control. Consider FOC, trapezoidal, or hybrid architectures.\n`;
-  }
-  if (domains.includes('iot-sensor')) {
-    prompt += `Domain: IoT sensor. Consider centralized cloud, edge processing, or mesh topologies.\n`;
-  }
-  if (domains.includes('processing-intensive')) {
-    prompt += `Domain: Processing. Consider MCU, DSP, FPGA, or hybrid processing.\n`;
-  }
-
-  // Extreme concepts for boundary exploration
-  if (conceptIndex === 0 && existingConcepts.length === 0) {
-    prompt += `\nStrategy: Ultra-low-power extreme. Minimize power at all costs.\n`;
-  } else if (conceptIndex === 1 && existingConcepts.length === 1) {
-    prompt += `\nStrategy: Maximum performance. Optimize for capability over power/cost.\n`;
-  } else {
-    prompt += `\nStrategy: Balanced approach exploring different architectural dimension.\n`;
-  }
-
-  // Diversity constraints
-  if (existingConcepts.length > 0) {
-    prompt += `\nExisting concepts (must differ in ≥1 dimension):\n`;
-    existingConcepts.forEach(c => {
-      prompt += `- ${c.name}: ${c.processing}, ${c.topology}, ${c.communication}, ${c.power}\n`;
-    });
-  }
-
-  prompt += `\nOutput structured concept with: name, processing, topology, communication, power, assumptions, pros, cons.\n`;
-
-  return prompt;
-}
-```
+- Include the full requirements and all detected domain hints as context.
+- Apply the extreme-concept strategy for early slots:
+  - Concept 1 (first slot, no prior concepts): Strategy "Ultra-low-power extreme — minimize power at all costs."
+  - Concept 2 (second slot, one prior concept): Strategy "Maximum performance — optimize for capability over power/cost."
+  - Remaining slots: Strategy "Balanced approach exploring a different architectural dimension."
+- If prior concepts exist, list them as diversity constraints: each prior concept's name, processing, topology, communication, and power — and require the new concept to differ in ≥1 dimension.
+- Output each concept with these fields: `name`, `processing`, `topology`, `communication`, `power`, `assumptions`, `pros`, `cons`.
 
 ### CONCEPT STRUCTURE
 
-Each generated concept must include:
+Each generated concept must include these fields:
 
-```javascript
-{
-  name: "Centralized MCU Architecture",
-  summary: "Single Cortex-M4 MCU handles all processing, sensors via I2C/SPI, wireless via UART.",
+| Field | Description | Example |
+|-------|-------------|---------|
+| `name` | Short descriptive name | "Centralized MCU Architecture" |
+| `summary` | One-sentence description of the approach | "Single Cortex-M4 MCU handles all processing..." |
+| `processing` | Processing architecture tag | "Cortex-M4 MCU with FPU" |
+| `topology` | System topology tag | "centralized-single-board" |
+| `communication` | Communication approach tag | "wired-serial-I2C-SPI" |
+| `power` | Power architecture tag | "switching-buck-converter" |
+| `characteristics` | Table: dimension / choice / rationale (4 rows: Processing, Topology, Communication, Power) | see example below |
+| `assumptions` | Explicit assumptions for Phase 3 validation (list of strings, ~4-6 items) | "BLE range sufficient for use case (<10m typical)" |
+| `blockDiagram` | ASCII functional block diagram (see ASCII BLOCK DIAGRAM GENERATION) | |
+| `pros` | Qualitative advantages (list, no numbers) | "Lower cost (single MCU, fewer components)" |
+| `cons` | Qualitative disadvantages (list, no numbers) | "Single point of failure (centralized)" |
+| `differentiation` | How this concept differs from each prior concept | "vs. Distributed: Centralized (not multi-node)" |
+| `innovation.standard` | Commodity/proven elements | "Commodity MCU", "Standard buck converter" |
+| `innovation.novel` | Novel or non-standard elements | "Sensor fusion algorithm (if advanced)" |
 
-  // Architectural dimensions (for diversity checking)
-  processing: "Cortex-M4 MCU with FPU",
-  topology: "centralized-single-board",
-  communication: "wired-serial-I2C-SPI",
-  power: "switching-buck-converter",
+**Example characteristics table:**
 
-  // Characteristics table
-  characteristics: [
-    { dimension: "Processing", choice: "Cortex-M4 MCU (with FPU)", rationale: "Sufficient for sensor fusion + control loops" },
-    { dimension: "Topology", choice: "Centralized (single-board)", rationale: "Simplifies design, reduces cost" },
-    { dimension: "Communication", choice: "I2C sensors, UART wireless", rationale: "Standard protocols, wide part availability" },
-    { dimension: "Power", choice: "Buck converter (battery → 3.3V)", rationale: "Efficient step-down, single rail" }
-  ],
-
-  // Explicit assumptions for Phase 1 validation
-  assumptions: [
-    "BLE range sufficient for use case (<10m typical)",
-    "Single-sided PCB acceptable",
-    "Sensor data rates <1kHz (I2C bandwidth adequate)",
-    "No galvanic isolation required",
-    "~100 MIPS processing headroom sufficient",
-    "Typical current draw ~50mA (est. 6-month battery life on 2000mAh)"
-  ],
-
-  // ASCII block diagram (functional blocks only)
-  blockDiagram: `
-                    +-------------------+
-                    |   Battery Pack    |
-                    |    (3.7V Li-Ion)  |
-                    +---------+---------+
-                              |
-                              v (power)
-                    +---------+---------+
-                    |   Buck Converter  |
-                    |   (3.7V → 3.3V)   |
-                    +---------+---------+
-                              |
-                              v (3.3V)
-        +---------------------+---------------------+
-        |                     |                     |
-        v                     v                     v
-+-------+-------+     +-------+-------+     +-------+-------+
-|  Cortex-M4    |     |  Sensor Array |     | Wireless Comm |
-|  MCU (Main)   |<--->|  (I2C/SPI)    |     |  (BLE/LoRa)   |
-+-------+-------+     +---------------+     +-------+-------+
-        |
-        v (control)
-+-------+-------+
-| Motor Driver  |
-| (PWM output)  |
-+---------------+
-
-Legend:
-  ----> : Signal flow
-  <---> : Bidirectional communication
-  |  v  : Power flow (downward)
-`,
-
-  // Qualitative trade-offs (no numbers yet)
-  pros: [
-    "Lower cost (single MCU, fewer components)",
-    "Simpler BOM (commodity parts)",
-    "Easier firmware development (single core)",
-    "Standard peripherals (I2C, SPI, UART)"
-  ],
-
-  cons: [
-    "Limited processing headroom (single MCU)",
-    "Single point of failure (centralized)",
-    "I2C bandwidth limits sensor scalability",
-    "Battery life constrained (always-on MCU)"
-  ],
-
-  // Differentiation from other concepts
-  differentiation: [
-    "vs. Distributed: Centralized (not multi-node)",
-    "vs. FPGA-based: MCU processing (not FPGA)",
-    "vs. Low-power extreme: Moderate power (not ultra-low)"
-  ],
-
-  // Innovation marking
-  innovation: {
-    standard: ["Commodity MCU", "Standard buck converter", "I2C sensor interface", "UART wireless"],
-    novel: ["Sensor fusion algorithm (if advanced)"]
-  }
-}
-```
+| Dimension | Choice | Rationale |
+|-----------|--------|-----------|
+| Processing | Cortex-M4 MCU (with FPU) | Sufficient for sensor fusion + control loops |
+| Topology | Centralized (single-board) | Simplifies design, reduces cost |
+| Communication | I2C sensors, UART wireless | Standard protocols, wide part availability |
+| Power | Buck converter (battery → 3.3V) | Efficient step-down, single rail |
 
 ### ABSTRACTION LEVEL ENFORCEMENT
 
@@ -1464,19 +1065,12 @@ Legend:
 
 Follow these guidelines for diagram formatting:
 
-```javascript
-function formatBlockDiagram(concept) {
-  // Guidelines:
-  // - Functional blocks only (no part numbers)
-  // - Directional arrows: ----> for signal, | v for power
-  // - Keep under 30 lines, under 80 characters wide
-  // - Use consistent box alignment
-  // - Include legend for arrow types
-
-  // Load template from .claude/librespin/templates/concept-template.md
-  // Follow Pattern 2 from 04-RESEARCH.md
-}
-```
+- Functional blocks only (no part numbers)
+- Directional arrows: `---->` for signal flow, `| v` for power flow (downward)
+- Keep under 30 lines, under 80 characters wide
+- Use consistent box alignment
+- Include a legend for arrow types at the bottom
+- Load the concept template from `.claude/librespin/templates/concept-template.md` for formatting reference
 
 ### OUTPUT FILES
 
@@ -1504,51 +1098,27 @@ Includes:
 
 ### ERROR HANDLING
 
-**Invalid configuration:**
-```javascript
-if (draftCount < 3 || draftCount > 10) {
-  throw new Error(`Invalid draft_count: ${draftCount}. Must be integer 3-10.`);
-}
-```
-
-**Missing requirements:**
-```javascript
-if (!fs.existsSync(requirementsPath)) {
-  throw new Error(`Requirements file not found: ${requirementsPath}. Run Phase 1 first.`);
-}
-```
-
-**Diversity check failures:**
-```javascript
-if (attempts >= maxRetries) {
-  console.warn(`Could not generate diverse concept after ${maxRetries} attempts.`);
-  console.warn(`Reducing count from ${draftCount} to ${concepts.length}`);
-  break; // Reduce count rather than forcing similarity
-}
-```
+- **Invalid configuration:** If `draft_count` is not an integer 3–10, stop with: "Invalid draft_count: {value}. Must be integer 3-10."
+- **Missing requirements:** If `.librespin/01-requirements/requirements.yaml` does not exist, stop with: "Requirements file not found. Run Phase 1 first."
+- **Diversity check failures:** After `maxRetries` failed attempts for a concept slot, stop generating further concepts. Display: "Could not generate diverse concept after {maxRetries} attempts. Reducing count from {draftCount} to {current count}." Do not force similarity — reduce count instead.
 
 ### COMPLETION SUMMARY
 
-After all concepts generated:
+After all concepts generated, display:
 
-```javascript
-console.log(`\nPhase 2 (Architecture Drafting) complete.`);
-console.log(`Generated: ${concepts.length} diverse concepts`);
-console.log(`\nFiles created:`);
-concepts.forEach(c => {
-  console.log(`  - concept-${c.name.toLowerCase().replace(/\s+/g, '-')}.md`);
-});
-console.log(`  - overview.md`);
-console.log(`\nNext: Run Phase 1 (Validation Gate) to assess concept feasibility.`);
+```
+Phase 2 (Architecture Drafting) complete.
+Generated: {count} diverse concepts
+
+Files created:
+  - concept-{name-slug}.md
+  - ...
+  - overview.md
+
+Next: Run Phase 3 (Validation Gate) to assess concept feasibility.
 ```
 
-**Update state file** `.librespin/state.md` — set `phase` to `2-architecture-drafting`:
-
-```javascript
-const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
-const updatedState = existingState.replace(/^phase: .+$/m, `phase: '2-architecture-drafting'`);
-fs.writeFileSync('.librespin/state.md', updatedState);
-```
+**Update state file** `.librespin/state.md` — replace the `phase:` frontmatter line with `phase: '2-architecture-drafting'`.
 
 ### DESIGN GOALS
 
@@ -1584,364 +1154,95 @@ Create explicit mappings between requirements terminology and component configur
 
 ### CONCEPT LOADING
 
-Load generated concepts from Phase 02:
-
-```javascript
-const conceptsDir = '.librespin/02-concepts/';
-const conceptFiles = fs.readdirSync(conceptsDir)
-  .filter(f => f.startsWith('concept-') && f.endsWith('.md'));
-
-if (conceptFiles.length === 0) {
-  throw new Error(`No concept files found in ${conceptsDir}. Run Phase 2 first.`);
-}
-
-console.log(`Creating requirement mappings for ${conceptFiles.length} concepts...`);
-```
+Load all concept files from `.librespin/02-concepts/` — files whose names start with `concept-` and end with `.md`. If no concept files found, stop with: "No concept files found in .librespin/02-concepts/. Run Phase 2 first." Display: "Creating requirement mappings for {count} concepts..."
 
 ### REQUIREMENTS LOADING
 
-Load requirements to extract technical specification terms:
-
-```javascript
-const requirementsPath = '.librespin/01-requirements/requirements.yaml';
-const requirements = yaml.load(fs.readFileSync(requirementsPath, 'utf8'), {
-  schema: yaml.FAILSAFE_SCHEMA
-});
-```
+Load requirements from `.librespin/01-requirements/requirements.yaml` (FAILSAFE_SCHEMA, no type coercion).
 
 ### TECHNICAL TERM EXTRACTION
 
-Extract all technical specification terms from requirements:
+Extract all technical specification terms from requirements into 6 categories: `protocols`, `interfaces`, `resources`, `electrical`, `performance`, `physical`.
 
-```javascript
-function extractTechnicalTerms(requirements) {
-  const terms = {
-    protocols: [],      // SPI Mode 1, I2C Fast Mode, UART 115200
-    interfaces: [],     // Quad-SPI, I2C, UART
-    resources: [],      // GPIO count, ADC channels, timers
-    electrical: [],     // Voltage levels, current limits
-    performance: [],    // Speed, bandwidth, latency
-    physical: []        // Port count, connector type
-  };
-
-  // Communication protocols
-  if (requirements.communication?.spi) {
-    const mode = requirements.communication.spi.mode;
-    if (mode !== undefined) {
-      terms.protocols.push({
-        term: `SPI Mode ${mode}`,
-        meaning: `Protocol timing: CPOL/CPHA configuration`,
-        context: 'SPI protocol specification'
-      });
-    }
-    terms.interfaces.push('SPI');
-  }
-
-  if (requirements.communication?.i2c) {
-    const speed = requirements.communication.i2c.speed || 'standard';
-    terms.protocols.push({
-      term: `I2C ${speed}`,
-      meaning: `Bus speed: ${speed === 'fast' ? '400kHz' : '100kHz'}`,
-      context: 'I2C protocol specification'
-    });
-    terms.interfaces.push('I2C');
-  }
-
-  // Resources
-  if (requirements.hmi?.gpio) {
-    terms.resources.push({
-      term: `${requirements.hmi.gpio} GPIO`,
-      meaning: `${requirements.hmi.gpio} general-purpose I/O pins required`,
-      context: 'HMI requirements'
-    });
-  }
-
-  // Physical connectivity
-  if (requirements.connectivity?.port_count) {
-    terms.physical.push({
-      term: `${requirements.connectivity.port_count} USB port(s)`,
-      meaning: `Number of physical USB ports available on host`,
-      context: 'Physical connectivity constraint'
-    });
-  }
-
-  return terms;
-}
-```
+- If `communication.spi` is present: add `SPI Mode {mode}` to protocols (meaning: "Protocol timing: CPOL/CPHA configuration", context: "SPI protocol specification"); add "SPI" to interfaces.
+- If `communication.i2c` is present: add `I2C {speed}` to protocols (meaning: "Bus speed: 400kHz if fast, else 100kHz", context: "I2C protocol specification"); add "I2C" to interfaces. Default speed is "standard".
+- If `hmi.gpio` is present: add `{N} GPIO` to resources (meaning: "{N} general-purpose I/O pins required", context: "HMI requirements").
+- If `connectivity.port_count` is present: add `{N} USB port(s)` to physical (meaning: "Number of physical USB ports available on host", context: "Physical connectivity constraint").
 
 ### COMPONENT EXTRACTION
 
-Extract component names and families from each concept:
+Scan each concept file's text for component name patterns and assign families:
 
-```javascript
-function extractComponents(concept) {
-  const componentPatterns = [
-    { pattern: /FT\d{3,4}[A-Z]*/gi, family: 'FTDI USB Bridge' },
-    { pattern: /CH\d{3,4}[A-Z]*/gi, family: 'WCH USB Bridge' },
-    { pattern: /USB251\d|USB340\d/gi, family: 'Microchip USB Hub' },
-    { pattern: /STM32[A-Z]\d/gi, family: 'STM32 MCU' },
-    { pattern: /nRF\d{4,5}/gi, family: 'Nordic MCU' },
-    { pattern: /CP210\d/gi, family: 'Silicon Labs USB-UART' },
-    { pattern: /MCP2221/gi, family: 'Microchip USB-I2C/GPIO' }
-  ];
+| Pattern | Family |
+|---------|--------|
+| `FT` + 3-4 digits + optional letters (e.g., FT4222H) | FTDI USB Bridge |
+| `CH` + 3-4 digits + optional letters (e.g., CH347) | WCH USB Bridge |
+| `USB251x` or `USB340x` | Microchip USB Hub |
+| `STM32` + letter + digit | STM32 MCU |
+| `nRF` + 4-5 digits | Nordic MCU |
+| `CP210x` | Silicon Labs USB-UART |
+| `MCP2221` | Microchip USB-I2C/GPIO |
 
-  const components = [];
-  const content = concept.content;
-
-  componentPatterns.forEach(({ pattern, family }) => {
-    const matches = content.match(pattern) || [];
-    const unique = [...new Set(matches)];
-    unique.forEach(name => {
-      components.push({
-        name,
-        family,
-        configurations: getKnownConfigurations(name, family)
-      });
-    });
-  });
-
-  return components;
-}
-```
+For each match, deduplicate by name, then look up known configurations (see KNOWN CONFIGURATIONS DATABASE).
 
 ### KNOWN CONFIGURATIONS DATABASE
 
-Maintain database of known component configurations for common families:
+Use this database when looking up component configurations. For any component not listed, use: modes = [], note = "Configuration unknown - requires manual datasheet research."
 
-```javascript
-function getKnownConfigurations(componentName, family) {
-  const configDatabase = {
-    'FTDI USB Bridge': {
-      'FT4222H': {
-        modes: [
-          {
-            name: 'Mode 0',
-            registers: 'DCNF1=0, DCNF0=0',
-            provides: '4 GPIO (GPIO0-3), 1 SPI Master',
-            limitations: 'Single SPI channel'
-          },
-          {
-            name: 'Mode 1',
-            registers: 'DCNF1=0, DCNF0=1',
-            provides: '2 GPIO (GPIO2-3), 1 SPI Master with 2 additional CS',
-            limitations: 'GPIO0-1 become CS2-3'
-          },
-          {
-            name: 'Mode 2',
-            registers: 'DCNF1=1, DCNF0=0',
-            provides: '2 GPIO (GPIO2-3), 4 SPI Masters',
-            limitations: 'GPIO0-1 become additional SPI MISO/MOSI'
-          }
-        ],
-        protocols: {
-          spi_modes: [0, 1, 2, 3],
-          quad_spi: true,
-          max_clock_mhz: 40
-        }
-      },
-      'FT2232H': {
-        modes: [
-          {
-            name: 'UART',
-            provides: '2 independent UART channels'
-          },
-          {
-            name: 'FIFO',
-            provides: '1 parallel FIFO interface'
-          },
-          {
-            name: 'SPI',
-            provides: '2 SPI Master interfaces'
-          }
-        ]
-      }
-    },
-    'WCH USB Bridge': {
-      'CH347': {
-        modes: [
-          {
-            name: 'Mode 0',
-            provides: '2 UART + 1 SPI + 1 I2C + 8 GPIO',
-            limitations: 'All interfaces active simultaneously'
-          }
-        ],
-        protocols: {
-          spi_modes: [0, 1, 2, 3],
-          quad_spi: false,
-          max_clock_mhz: 60
-        }
-      }
-    }
-  };
+**FT4222H** (FTDI USB Bridge):
+- SPI modes supported: 0, 1, 2, 3 | Quad-SPI: yes | Max clock: 40 MHz
+- Mode 0 (DCNF1=0, DCNF0=0): provides 4 GPIO (GPIO0-3), 1 SPI Master | limitation: single SPI channel
+- Mode 1 (DCNF1=0, DCNF0=1): provides 2 GPIO (GPIO2-3), 1 SPI Master with 2 additional CS | limitation: GPIO0-1 become CS2-3
+- Mode 2 (DCNF1=1, DCNF0=0): provides 2 GPIO (GPIO2-3), 4 SPI Masters | limitation: GPIO0-1 become additional SPI MISO/MOSI
 
-  return configDatabase[family]?.[componentName] || {
-    modes: [],
-    note: 'Configuration unknown - requires manual datasheet research'
-  };
-}
-```
+**FT2232H** (FTDI USB Bridge):
+- UART mode: 2 independent UART channels
+- FIFO mode: 1 parallel FIFO interface
+- SPI mode: 2 SPI Master interfaces
+
+**CH347** (WCH USB Bridge):
+- SPI modes supported: 0, 1, 2, 3 | Quad-SPI: no | Max clock: 60 MHz
+- Mode 0: provides 2 UART + 1 SPI + 1 I2C + 8 GPIO | limitation: all interfaces active simultaneously
 
 ### TERMINOLOGY COLLISION DETECTION
 
-Identify when same term appears in requirements and component specs with potentially different meanings:
+For each protocol term in requirements, compare against each component's configuration mode names. Look for cases where the same word "Mode N" appears in both:
 
-```javascript
-function detectTerminologyCollisions(technicalTerms, components) {
-  const collisions = [];
+- If a requirement term contains "Mode {N}" and a component configuration mode is also named "Mode {N}", record a collision:
+  - Term: "Mode"
+  - Requirement: {term text}, meaning, context
+  - Component: "{component name} {mode name}", meaning = mode.provides, context = "Chip configuration mode"
+  - Severity: HIGH
+  - Risk: "Conflating protocol mode with chip configuration mode"
 
-  technicalTerms.protocols.forEach(reqTerm => {
-    components.forEach(component => {
-      // Check if component mentions same term
-      const componentModes = component.configurations.modes || [];
-      componentModes.forEach(mode => {
-        // Look for "Mode" collision
-        if (reqTerm.term.includes('Mode') && mode.name.includes('Mode')) {
-          const reqModeNum = reqTerm.term.match(/Mode (\d+)/)?.[1];
-          const compModeNum = mode.name.match(/Mode (\d+)/)?.[1];
-
-          if (reqModeNum === compModeNum) {
-            collisions.push({
-              term: 'Mode',
-              requirement: {
-                text: reqTerm.term,
-                meaning: reqTerm.meaning,
-                context: reqTerm.context
-              },
-              component: {
-                text: `${component.name} ${mode.name}`,
-                meaning: mode.provides,
-                context: `Chip configuration mode`
-              },
-              severity: 'HIGH',
-              risk: 'Conflating protocol mode with chip configuration mode'
-            });
-          }
-        }
-      });
-    });
-  });
-
-  return collisions;
-}
-```
+Return all detected collisions. An empty list means no collisions found.
 
 ### MAPPING TABLE GENERATION
 
-Create explicit requirement → component mapping for each concept:
+For each protocol, resource, and physical term extracted from requirements, map it against each component's capabilities:
 
-```javascript
-function createMappingTable(concept, technicalTerms, components) {
-  const mappings = [];
+**SPI Mode mapping:** If the requirement term is "SPI Mode {N}" and the component has SPI protocol support, check whether mode N is in the supported modes list.
+- `compatible` = true if mode N is in the supported list
+- `configuration_needed` = "SPI protocol register configuration (not chip mode)"
+- `notes` = "Set SPI_MODE register to {N}, independent of chip configuration mode"
 
-  // Map each requirement to component capabilities
-  [...technicalTerms.protocols, ...technicalTerms.resources, ...technicalTerms.physical].forEach(reqTerm => {
-    components.forEach(component => {
-      const mapping = mapRequirementToComponent(reqTerm, component);
-      if (mapping.relevant) {
-        mappings.push(mapping);
-      }
-    });
-  });
+**GPIO mapping:** If the requirement term is "{N} GPIO" and the component has chip modes, find the first chip mode that provides ≥ N GPIO pins.
+- `compatible` = true if a viable mode exists
+- `component_capability` = "{Mode Name}: {mode.provides}" or "Insufficient GPIO" if no viable mode
+- `configuration_needed` = the viable chip mode name, or "None"
+- `notes` = "Use chip {mode name} for {N} GPIO availability" or "Component cannot satisfy requirement"
 
-  return {
-    concept: concept.name,
-    mappings,
-    collisions: detectTerminologyCollisions(technicalTerms, components),
-    configuration: determineOptimalConfiguration(mappings, components)
-  };
-}
-
-function mapRequirementToComponent(reqTerm, component) {
-  // Example: Map "SPI Mode 1" to FT4222H capabilities
-  if (reqTerm.term.includes('SPI Mode')) {
-    const modeNum = parseInt(reqTerm.term.match(/Mode (\d+)/)?.[1]);
-    const supportedModes = component.configurations.protocols?.spi_modes || [];
-
-    return {
-      relevant: true,
-      requirement: reqTerm.term,
-      requirement_meaning: reqTerm.meaning,
-      component: component.name,
-      component_capability: `Supports SPI modes ${supportedModes.join(', ')}`,
-      compatible: supportedModes.includes(modeNum),
-      configuration_needed: 'SPI protocol register configuration (not chip mode)',
-      notes: `Set SPI_MODE register to ${modeNum}, independent of chip configuration mode`
-    };
-  }
-
-  // Example: Map "4 GPIO" to FT4222H modes
-  if (reqTerm.term.includes('GPIO')) {
-    const gpioCount = parseInt(reqTerm.term.match(/(\d+) GPIO/)?.[1]);
-    const modes = component.configurations.modes || [];
-
-    const viableModes = modes.filter(mode => {
-      const modeGpio = parseInt(mode.provides.match(/(\d+) GPIO/)?.[1] || '0');
-      return modeGpio >= gpioCount;
-    });
-
-    return {
-      relevant: true,
-      requirement: reqTerm.term,
-      requirement_meaning: reqTerm.meaning,
-      component: component.name,
-      component_capability: viableModes.length > 0 ? `${viableModes[0].name}: ${viableModes[0].provides}` : 'Insufficient GPIO',
-      compatible: viableModes.length > 0,
-      configuration_needed: viableModes.length > 0 ? viableModes[0].name : 'None',
-      notes: viableModes.length > 0 ? `Use chip ${viableModes[0].name} for ${gpioCount} GPIO availability` : 'Component cannot satisfy requirement'
-    };
-  }
-
-  return { relevant: false };
-}
-```
+Collect all relevant mappings into a table. Then run collision detection and configuration determination. Produce per-concept result: name, mappings list, collisions list, configuration spec.
 
 ### CONFIGURATION DETERMINATION
 
-Determine single chip configuration that satisfies all requirements:
+For each component, determine the single chip configuration that satisfies all compatible requirements:
 
-```javascript
-function determineOptimalConfiguration(mappings, components) {
-  const configurationsByComponent = {};
-
-  // Group mappings by component
-  components.forEach(component => {
-    const componentMappings = mappings.filter(m => m.component === component.name && m.compatible);
-
-    const requiredConfigs = componentMappings.map(m => m.configuration_needed);
-    const uniqueConfigs = [...new Set(requiredConfigs.filter(c => c !== 'SPI protocol register configuration (not chip mode)'))];
-
-    // Check if single chip config can satisfy all
-    if (uniqueConfigs.length === 0) {
-      // All requirements are protocol-level (registers), any chip mode works
-      configurationsByComponent[component.name] = {
-        chip_mode: component.configurations.modes[0]?.name || 'Default',
-        protocol_configs: requiredConfigs,
-        feasible: true,
-        notes: 'All requirements are protocol/register configurations, compatible with any chip mode'
-      };
-    } else if (uniqueConfigs.length === 1) {
-      // Single chip mode needed
-      configurationsByComponent[component.name] = {
-        chip_mode: uniqueConfigs[0],
-        protocol_configs: requiredConfigs.filter(c => c !== uniqueConfigs[0]),
-        feasible: true,
-        notes: `All requirements satisfied in ${uniqueConfigs[0]}`
-      };
-    } else {
-      // Multiple chip modes needed - CONFLICT
-      configurationsByComponent[component.name] = {
-        chip_mode: null,
-        protocol_configs: [],
-        feasible: false,
-        conflict: `Requires multiple chip modes: ${uniqueConfigs.join(', ')}. Can only use one mode at a time.`,
-        recommendation: 'Choose different component or revise requirements'
-      };
-    }
-  });
-
-  return configurationsByComponent;
-}
-```
+- Collect all `configuration_needed` values from compatible mappings for this component.
+- Exclude protocol-level configurations (e.g., "SPI protocol register configuration (not chip mode)") from the chip-mode count — these are register settings, not chip modes.
+- **0 unique chip modes needed:** All requirements are protocol/register configurations, compatible with any chip mode. Use the first available chip mode as default. Mark feasible = true. Notes: "All requirements are protocol/register configurations, compatible with any chip mode."
+- **1 unique chip mode needed:** Use that chip mode. Mark feasible = true. Notes: "All requirements satisfied in {mode name}."
+- **2+ unique chip modes needed:** CONFLICT — chip can only be in one mode at a time. Mark feasible = false. Record: "Requires multiple chip modes: {list}. Can only use one mode at a time." Recommendation: "Choose different component or revise requirements."
 
 ### OUTPUT GENERATION
 
@@ -1998,40 +1299,24 @@ ${Object.values(configuration).every(c => c.feasible) ? 'Concept ready for Phase
 
 ### COMPLETION SUMMARY
 
-After mapping all concepts:
+After mapping all concepts, display:
 
-```javascript
-console.log(`\nPhase 2.5 (Requirements-to-Component Mapping) complete.`);
-console.log(`Mapped: ${concepts.length} concepts`);
-console.log(`Collisions detected: ${totalCollisions}`);
-console.log(`Configuration conflicts: ${configConflicts}`);
-console.log(`\nMapping sections added to concept files.`);
-console.log(`\nNext: Run Phase 1 (Validation Gate) with explicit configuration specifications.`);
+```
+Phase 2.5 (Requirements-to-Component Mapping) complete.
+Mapped: {count} concepts
+Collisions detected: {totalCollisions}
+Configuration conflicts: {configConflicts}
+
+Mapping sections added to concept files.
+
+Next: Run Phase 3 (Validation Gate) with explicit configuration specifications.
 ```
 
 ### ERROR HANDLING
 
-**Missing requirements:**
-```javascript
-if (!fs.existsSync(requirementsPath)) {
-  throw new Error(`Requirements file not found: ${requirementsPath}. Run Phase 1 first.`);
-}
-```
-
-**Missing concept files:**
-```javascript
-if (conceptFiles.length === 0) {
-  throw new Error(`No concept files found. Run Phase 2 first.`);
-}
-```
-
-**Unknown component configurations:**
-```javascript
-if (component.configurations.note) {
-  console.warn(`⚠ ${component.name}: ${component.configurations.note}`);
-  console.warn(`  Manual datasheet research required for accurate mapping.`);
-}
-```
+- **Missing requirements:** If `.librespin/01-requirements/requirements.yaml` does not exist, stop with: "Requirements file not found. Run Phase 1 first."
+- **Missing concept files:** If no concept files found, stop with: "No concept files found. Run Phase 2 first."
+- **Unknown component configurations:** If a component has no known configuration (note field present), display: "⚠ {component name}: {note} — Manual datasheet research required for accurate mapping."
 
 ## PHASE 3: VALIDATION GATE
 
@@ -2049,41 +1334,18 @@ Filter architecture concepts by feasibility before expensive component research.
 
 Load validation threshold from config file:
 
-```javascript
-const yaml = require('js-yaml');
-const fs = require('fs');
-
-// Read configuration
-const configPath = '.librespin/config.yaml';
-const config = yaml.load(fs.readFileSync(configPath, 'utf8'), {
-  schema: yaml.FAILSAFE_SCHEMA
-});
-
-// Validate confidence_threshold
-const threshold = config.confidence_threshold;
-if (typeof threshold !== 'number' || threshold < 60 || threshold > 95) {
-  throw new Error(`Invalid confidence_threshold: ${threshold}. Must be integer 60-95. Check ${configPath}`);
-}
-
-console.log(`Validation threshold: ${threshold}%`);
-```
+- Read `.librespin/config.yaml` using YAML parser.
+- Extract `confidence_threshold` field.
+- Validate: must be a number between 60 and 95. If invalid, stop with error: `Invalid confidence_threshold: {value}. Must be integer 60-95. Check .librespin/config.yaml`
+- Log: `Validation threshold: {threshold}%`
 
 ### CONCEPT LOADING
 
 Load generated concepts from Phase 2:
 
-```javascript
-const conceptsDir = '.librespin/02-concepts/';
-const conceptFiles = fs.readdirSync(conceptsDir)
-  .filter(f => f.startsWith('concept-') && f.endsWith('.md'));
-
-if (conceptFiles.length === 0) {
-  throw new Error(`No concept files found in ${conceptsDir}. Run Phase 2 first.`);
-}
-
-console.log(`Validating ${conceptFiles.length} concepts...`);
-```
-
+- Read all files matching `concept-*.md` from `.librespin/02-concepts/`.
+- If no files found, stop with error: `No concept files found in .librespin/02-concepts/. Run Phase 2 first.`
+- Log: `Validating {N} concepts...`
 
 ### CONFIGURATION FEASIBILITY CHECK
 
@@ -2093,174 +1355,71 @@ For concepts with configurable components (chips with multiple modes, multi-func
 
 **1. Identify configurable components:**
 
-```javascript
-function identifyConfigurableComponents(concept) {
-  const configurablePatterns = [
-    { pattern: /FT\d{3,4}[A-Z]*/gi, type: 'FTDI bridge', modes: 'chip configuration modes' },
-    { pattern: /CH\d{3,4}[A-Z]*/gi, type: 'WCH bridge', modes: 'function modes' },
-    { pattern: /STM32.*|nRF.*|ESP.*/gi, type: 'MCU', modes: 'peripheral configurations' },
-    { pattern: /USB251\d|USB340\d/gi, type: 'USB hub', modes: 'port configurations' }
-  ];
-
-  const components = [];
-  configurablePatterns.forEach(({ pattern, type, modes }) => {
-    const matches = concept.content.match(pattern) || [];
-    matches.forEach(match => {
-      components.push({ name: match, type, modes });
-    });
-  });
-
-  return components;
-}
-```
+Scan concept content for these component families and note their configuration modes:
+- FT-series (e.g., FT232H, FT4232H): FTDI bridge — chip configuration modes
+- CH-series (e.g., CH343, CH9102): WCH bridge — function modes
+- STM32/nRF/ESP variants: MCU — peripheral configurations
+- USB251x/USB340x: USB hub — port configurations
 
 **2. Extract technical specification terms from requirements:**
 
-```javascript
-function extractTechnicalTerms(requirements) {
-  const terms = {
-    protocols: [],      // SPI Mode 1, I2C Fast Mode, UART 115200
-    interfaces: [],     // Quad-SPI, I2C, UART
-    resources: [],      // GPIO count, ADC channels, timers
-    electrical: [],     // Voltage levels, current limits
-    performance: []     // Speed, bandwidth, latency
-  };
-
-  // Extract from requirements YAML
-  if (requirements.communication) {
-    if (requirements.communication.spi) {
-      terms.protocols.push(`SPI Mode ${requirements.communication.spi.mode || 'unspecified'}`);
-      terms.interfaces.push('SPI');
-    }
-    if (requirements.communication.i2c) {
-      terms.protocols.push(`I2C ${requirements.communication.i2c.speed || 'unspecified'}`);
-      terms.interfaces.push('I2C');
-    }
-  }
-
-  if (requirements.hmi?.gpio) {
-    terms.resources.push(`${requirements.hmi.gpio} GPIO`);
-  }
-
-  return terms;
-}
-```
+From the requirements YAML, extract:
+- **protocols:** SPI mode (e.g., `SPI Mode 1`), I2C speed (e.g., `I2C Fast Mode`), UART baud rate
+- **interfaces:** Quad-SPI, I2C, UART (named identifiers)
+- **resources:** GPIO count, ADC channels, timer count
+- **electrical:** Voltage levels, current limits
+- **performance:** Speed, bandwidth, latency
 
 **3. Create requirement-to-component mapping:**
 
-For each configurable component, build explicit mapping table:
+For each configurable component, build an explicit mapping table with these fields:
+- `component`: part name
+- `requirements`: list of entries with `requirement`, `component_capability`, `configuration_needed`, `compatible` (boolean)
+- `configuration`: the single selected chip configuration
+- `feasible`: overall boolean
+- `conflicts`: list of incompatible requirement strings
 
-```javascript
-function createRequirementMapping(component, requirements, technicalTerms) {
-  const mapping = {
-    component: component.name,
-    requirements: [],
-    configuration: null,
-    feasible: true,
-    conflicts: []
-  };
-
-  // Map each requirement term to component capability
-  technicalTerms.protocols.forEach(term => {
-    const componentSupport = checkComponentSupport(component, term);
-    mapping.requirements.push({
-      requirement: term,
-      component_capability: componentSupport.capability,
-      configuration_needed: componentSupport.config,
-      compatible: componentSupport.compatible
-    });
-
-    if (!componentSupport.compatible) {
-      mapping.feasible = false;
-      mapping.conflicts.push(`${term} not supported by ${component.name}`);
-    }
-  });
-
-  // Determine single configuration that satisfies all requirements
-  mapping.configuration = determineOptimalConfiguration(component, mapping.requirements);
-
-  return mapping;
-}
-```
+Map each requirement term to component capability. If a requirement is not supported by the component, set `compatible = false` and add the conflict to `conflicts`.
 
 **4. Verify single-configuration feasibility:**
 
-```javascript
-function verifySingleConfiguration(mapping) {
-  // Check if all requirements can be satisfied in ONE chip configuration
-  const configs = mapping.requirements.map(r => r.configuration_needed);
-  const uniqueConfigs = [...new Set(configs)];
-
-  if (uniqueConfigs.length > 1) {
-    return {
-      feasible: false,
-      reason: `Requires multiple chip configurations: ${uniqueConfigs.join(', ')}. Can only use one configuration at a time.`,
-      recommendation: `Choose different component or revise requirements`
-    };
-  }
-
-  // Check for pin conflicts in chosen configuration
-  const pinConflicts = checkPinConflicts(mapping.configuration, mapping.requirements);
-  if (pinConflicts.length > 0) {
-    return {
-      feasible: false,
-      reason: `Pin conflicts in ${mapping.configuration}: ${pinConflicts.join(', ')}`,
-      recommendation: `Use chip configuration with non-conflicting pin assignments`
-    };
-  }
-
-  return {
-    feasible: true,
-    configuration: mapping.configuration,
-    reason: `All requirements satisfied in ${mapping.configuration}`
-  };
-}
-```
+- Collect all `configuration_needed` values from the requirements list.
+- If more than one unique configuration is required: infeasible — reason: `Requires multiple chip configurations: {list}. Can only use one configuration at a time.` Recommendation: `Choose different component or revise requirements`
+- Check for pin conflicts within the chosen configuration. If any: infeasible — reason: `Pin conflicts in {config}: {conflicts}` Recommendation: `Use chip configuration with non-conflicting pin assignments`
+- If no conflicts: feasible — reason: `All requirements satisfied in {config}`
 
 **5. Document mapping in concept file:**
 
-Add section BEFORE ## Validation:
+Add this section BEFORE `## Validation`:
 
 ```markdown
 ## Configuration Feasibility
 
-**Component:** ${component.name}
+**Component:** {component name}
 
 ### Requirement-to-Component Mapping
 
 | Requirement | Component Capability | Configuration | Compatible |
 |-------------|----------------------|---------------|------------|
-${mapping.requirements.map(r => `| ${r.requirement} | ${r.component_capability} | ${r.configuration_needed} | ${r.compatible ? '✅' : '❌'} |`).join('\n')}
+| {requirement} | {capability} | {config_needed} | ✅ or ❌ |
 
-**Selected Configuration:** ${mapping.configuration}
+**Selected Configuration:** {config}
 
-**Feasibility:** ${configCheck.feasible ? '✅ FEASIBLE' : '❌ INFEASIBLE'}
+**Feasibility:** ✅ FEASIBLE or ❌ INFEASIBLE
 
-**Rationale:** ${configCheck.reason}
+**Rationale:** {reason}
 
-${configCheck.feasible ? '' : `\n**Fix Required:** ${configCheck.recommendation}`}
+**Fix Required:** {recommendation}  ← only if infeasible
 ```
 
 **6. Fail concept if configuration infeasible:**
 
-```javascript
-const configCheck = verifySingleConfiguration(mapping);
-
-if (!configCheck.feasible) {
-  concept.validation_status = 'config_failed';
-  concept.confidenceScore = 0;
-  concept.failureReason = configCheck.reason;
-  concept.recommendation = configCheck.recommendation;
-
-  console.log(`❌ ${concept.name}: CONFIGURATION FAILURE`);
-  console.log(`   Component: ${component.name}`);
-  console.log(`   Reason: ${configCheck.reason}`);
-  console.log(`   Fix: ${configCheck.recommendation}`);
-
-  // Skip remaining validation for this concept
-  continue;
-}
-```
+If `configCheck.feasible` is false:
+- Set `concept.validation_status = 'config_failed'`
+- Set `concept.confidenceScore = 0`
+- Record `failureReason` and `recommendation`
+- Log the component name, reason, and fix
+- Skip all remaining validation steps for this concept
 
 This check runs BEFORE breaking assumption identification and dimension scoring.
 
@@ -2393,56 +1552,15 @@ Use WebSearch or WebFetch for research. **DO NOT fabricate sources or findings.*
 
 **Implementation:**
 
-```javascript
-async function verifyAssumptionWithHierarchy(assumption) {
-  const sourceHierarchy = [
-    { tier: 1, name: 'vendor_datasheets', confidence: 'high' },
-    { tier: 2, name: 'industry_standards', confidence: 'medium-high' },
-    { tier: 3, name: 'academic_papers', confidence: 'medium' },
-    { tier: 4, name: 'technical_forums', confidence: 'low' }
-  ];
+For each assumption, work through source tiers in order (highest reliability first). Stop at the first tier that produces a conclusive result:
+- Conclusive → record verdict ('validated' or 'invalidated'), confidence from that tier, and the tier number reached
+- All tiers inconclusive → verdict = 'inconclusive', confidence = 'none', tier_reached = 0
 
-  const findings = {
-    assumption: assumption.question,
-    sources: [],
-    verdict: null,
-    confidence: null,
-    tier_reached: null
-  };
-
-  // Try each tier in order (highest reliability first)
-  for (const tier of sourceHierarchy) {
-    const results = await searchTier(tier, assumption.keywords);
-
-    if (results.length > 0) {
-      findings.sources.push(...results.map(r => ({
-        ...r,
-        tier: tier.tier,
-        tier_name: tier.name
-      })));
-
-      // Analyze results from this tier
-      const analysis = analyzeResults(results, assumption);
-
-      if (analysis.isConclusive) {
-        findings.verdict = analysis.verdict; // 'validated' or 'invalidated'
-        findings.confidence = tier.confidence;
-        findings.tier_reached = tier.tier;
-        break; // Stop at first conclusive tier
-      }
-    }
-  }
-
-  // If no conclusive results from any tier
-  if (findings.verdict === null) {
-    findings.verdict = 'inconclusive';
-    findings.confidence = 'none';
-    findings.tier_reached = 0;
-  }
-
-  return findings;
-}
-```
+Tiers and their confidence levels:
+- Tier 1 (vendor_datasheets): 'high'
+- Tier 2 (industry_standards): 'medium-high'
+- Tier 3 (academic_papers): 'medium'
+- Tier 4 (technical_forums): 'low'
 
 ### SURGICAL SCORE ADJUSTMENT
 
@@ -2462,35 +1580,15 @@ After web research verification completes, adjust dimension scores based on find
 | Unexpected complexity discovered | Complexity | Decrease to 20-40 |
 | Requirements gap identified | Requirements Coverage | Decrease to 20-60 |
 
-**Implementation:**
+**Score adjustment logic:**
 
-```javascript
-function adjustScoreBasedOnResearch(initialScores, findings) {
-  const adjusted = { ...initialScores };
-  const log = [];
+For each research finding, apply to the affected dimension:
+- `verdict = 'validated'` AND `confidence = 'high'` → raise score to at least 80 (proficient/excellent)
+- `verdict = 'invalidated'` → cap score at 30 (poor/unacceptable)
+- `verdict = 'inconclusive'` → set score to 50 (average, reflects uncertainty)
+- No change if finding has no effect on a given dimension
 
-  findings.forEach(finding => {
-    const dim = finding.affects_dimension;
-    const oldScore = adjusted[dim];
-    let newScore = oldScore;
-
-    if (finding.verdict === 'validated' && finding.confidence === 'high') {
-      newScore = Math.max(oldScore, 80); // Move to proficient/excellent
-    } else if (finding.verdict === 'invalidated') {
-      newScore = Math.min(oldScore, 30); // Move to poor/unacceptable
-    } else if (finding.verdict === 'inconclusive') {
-      newScore = 50; // Move to average (reflects uncertainty)
-    }
-
-    if (newScore !== oldScore) {
-      adjusted[dim] = newScore;
-      log.push({ dim, oldScore, newScore, reason: finding.verdict });
-    }
-  });
-
-  return { adjusted, log };
-}
-```
+Log every adjustment: dimension, old score, new score, reason.
 
 **Update concept ## Validation section with adjusted scores:**
 
@@ -2519,105 +1617,25 @@ For each concept, check if system-level integration is physically possible:
 
 **1. Count USB devices:**
 
-```javascript
-function countUsbDevices(concept) {
-  const usbDevicePatterns = [
-    /USB.*bridge/gi,
-    /FT\d{3,4}[A-Z]*/gi,  // FTDI chips
-    /CH\d{3,4}[A-Z]*/gi,  // WCH chips
-    /CP210\d/gi,          // Silicon Labs
-    /MCP2221/gi,          // Microchip
-    /USB.*UART|USB.*SPI|USB.*I2C/gi
-  ];
-
-  let deviceCount = 0;
-  const content = concept.content.toLowerCase();
-  const devices = [];
-
-  // Count each USB bridge IC as 1 USB device
-  usbDevicePatterns.forEach(pattern => {
-    const matches = content.match(pattern) || [];
-    deviceCount += matches.length;
-    devices.push(...matches);
-  });
-
-  return {
-    count: deviceCount,
-    devices: devices
-  };
-}
-```
+Scan concept content for USB bridge IC patterns — count each match as one USB device:
+- USB bridge patterns: `USB.*bridge`, FTDI chips (FT-prefix), WCH chips (CH-prefix), Silicon Labs (CP210x), Microchip (MCP2221), USB-to-UART/SPI/I2C converters
 
 **2. Check hub requirement:**
 
-```javascript
-function checkTopologyFeasibility(concept, requirements) {
-  const usbDevices = countUsbDevices(concept);
-  const portsAvailable = requirements.connectivity?.port_count || 1;
+- If number of USB devices > ports available AND no USB hub is present in the BOM → infeasible: `{N} USB devices require {N}-port hub (or {N} ports), but concept has no hub and only {ports} port(s) available`. Recommendation: `Add USB hub IC (e.g., USB2514B, USB3340) to BOM`
+- If hub is present but has fewer ports than USB devices → infeasible: `{N} USB devices require {N}-port hub, but hub only has {hub_ports} ports`. Recommendation: `Use {N}-port hub or reduce USB device count`
+- If hub present with sufficient ports, or single USB device → feasible
 
-  // Check if hub is present in BOM/concept
-  const hasHub = /USB.*hub|hub.*USB|USB251\d|USB340\d/gi.test(concept.content);
-
-  if (usbDevices.count > portsAvailable && !hasHub) {
-    return {
-      feasible: false,
-      reason: `${usbDevices.count} USB devices require ${usbDevices.count}-port hub (or ${usbDevices.count} ports), but concept has no hub and only ${portsAvailable} port(s) available`,
-      recommendation: `Add USB hub IC (e.g., USB2514B, USB3340) to BOM`,
-      devices: usbDevices.devices
-    };
-  }
-
-  if (usbDevices.count > portsAvailable && hasHub) {
-    // Verify hub has enough ports
-    const hubPorts = extractHubPortCount(concept);
-    if (hubPorts && hubPorts < usbDevices.count) {
-      return {
-        feasible: false,
-        reason: `${usbDevices.count} USB devices require ${usbDevices.count}-port hub, but hub only has ${hubPorts} ports`,
-        recommendation: `Use ${usbDevices.count}-port hub or reduce USB device count`
-      };
-    }
-  }
-
-  return {
-    feasible: true,
-    reason: usbDevices.count <= 1 ? 'Single USB device, no hub needed' : `Hub present for ${usbDevices.count} USB devices`
-  };
-}
-
-function extractHubPortCount(concept) {
-  // Extract hub port count from part number or description
-  // Examples: "USB2514B" = 4-port, "USB3340" = 4-port
-  const hubMatch = concept.content.match(/USB(\d)(\d{2,3})[A-Z]?/i);
-  if (hubMatch) {
-    const portCount = parseInt(hubMatch[1], 10);
-    if (portCount >= 2 && portCount <= 7) {
-      return portCount;
-    }
-  }
-  return null; // Unknown port count
-}
-```
+Extract hub port count from part number: USB2514B = 4-port, USB3340 = 4-port (parse leading digit after "USB" if 2-7).
 
 **3. Fail concept immediately if topology infeasible:**
 
-```javascript
-const topologyCheck = checkTopologyFeasibility(concept, requirements);
-
-if (!topologyCheck.feasible) {
-  concept.validation_status = 'topology_failed';
-  concept.confidenceScore = 0;
-  concept.failureReason = topologyCheck.reason;
-  concept.recommendation = topologyCheck.recommendation;
-
-  console.log(`❌ ${concept.name}: TOPOLOGY FAILURE`);
-  console.log(`   Reason: ${topologyCheck.reason}`);
-  console.log(`   Fix: ${topologyCheck.recommendation}`);
-
-  // Skip remaining validation for this concept
-  continue;
-}
-```
+If topology check fails:
+- Set `concept.validation_status = 'topology_failed'`
+- Set `concept.confidenceScore = 0`
+- Record `failureReason` and `recommendation`
+- Log: concept name, reason, fix recommendation
+- Skip remaining validation for this concept
 
 **4. Document topology check in concept file:**
 
@@ -2626,13 +1644,12 @@ Add section to concept BEFORE ## Validation:
 ```markdown
 ## Physical Topology Check
 
-**USB Devices:** ${usbDevices.count}
-**Ports Available:** ${portsAvailable}
-**Hub Required:** ${usbDevices.count > portsAvailable ? 'YES' : 'NO'}
-**Hub Present:** ${hasHub ? 'YES' : 'NO'}
-**Topology Status:** ${topologyCheck.feasible ? '✅ FEASIBLE' : '❌ INFEASIBLE'}
-
-${topologyCheck.reason}
+**USB Devices:** {count}
+**Ports Available:** {ports}
+**Hub Required:** YES or NO
+**Hub Present:** YES or NO
+**Topology Status:** ✅ FEASIBLE or ❌ INFEASIBLE
+{topology reason}
 ```
 
 This check runs BEFORE dimension scoring. Non-feasible concepts score 0% and skip scoring entirely.
@@ -2741,96 +1758,24 @@ For each concept:
 4. Document scores in table format (no justifications - just scores)
 5. Calculate weighted confidence in next step
 
-**Implementation:**
+**Scoring rules per dimension:**
 
-```javascript
-// Evaluate concept against rubric
-const dimensionScores = {
-  requirements_coverage: evaluateRequirementsCoverage(concept, requirements),
-  technical_feasibility: evaluateTechnicalFeasibility(concept),
-  physical_topology: evaluatePhysicalTopology(concept, requirements),
-  part_availability: evaluatePartAvailability(concept),
-  cost: evaluateCost(concept),
-  complexity: evaluateComplexity(concept)
-};
+Evaluate `physical_topology` dimension:
+- Topology infeasible (from Physical Topology Check) → score 10
+- Single USB device, no hub needed → score 90
+- Multi-device with hub, hub correctly sized (ports ≥ device count) → score 90
+- Multi-device with hub, hub one port short → score 70
+- Multi-device with hub, hub clearly undersized → score 30
+- Multiple ports available, no hub (unusual) → score 70
+- Topology unclear → score 50
 
-// Each evaluation function returns tier score: 10, 30, 50, 70, or 90
-```
-
-**Physical Topology evaluation function:**
-
-```javascript
-function evaluatePhysicalTopology(concept, requirements) {
-  const topologyCheck = checkTopologyFeasibility(concept, requirements);
-
-  if (!topologyCheck.feasible) {
-    return 10; // Infeasible - critical failure
-  }
-
-  const usbDevices = countUsbDevices(concept);
-  const portsAvailable = requirements.connectivity?.port_count || 1;
-  const hasHub = /USB.*hub|hub.*USB|USB251\d|USB340\d/gi.test(concept.content);
-
-  // Single device, no hub needed
-  if (usbDevices.count === 1) {
-    return 90; // Excellent - simple topology
-  }
-
-  // Multi-device with properly sized hub
-  if (usbDevices.count > 1 && hasHub) {
-    const hubPorts = extractHubPortCount(concept);
-    if (hubPorts >= usbDevices.count) {
-      return 90; // Excellent - hub properly sized
-    } else if (hubPorts >= usbDevices.count - 1) {
-      return 70; // Good - marginal but viable
-    } else {
-      return 30; // Poor - hub undersized
-    }
-  }
-
-  // Multi-port available, no hub needed
-  if (usbDevices.count <= portsAvailable) {
-    return 70; // Good - viable but uncommon for embedded
-  }
-
-  return 50; // Average - unclear topology
-}
-```
-
-
-**Technical Feasibility evaluation function:**
-
-```javascript
-function evaluateTechnicalFeasibility(concept) {
-  let score = 90; // Start optimistic
-
-  // Check configuration feasibility
-  const configMapping = concept.configurationMapping;
-  if (!configMapping) {
-    score -= 10; // Configuration not specified
-  } else if (!configMapping.feasible) {
-    return 10; // Configuration infeasible - critical failure
-  } else if (configMapping.disambiguated === false) {
-    score -= 20; // Overloaded terms not disambiguated
-  }
-
-  // Check technical claims verification (existing logic)
-  const unverifiedClaims = countUnverifiedTechnicalClaims(concept);
-  if (unverifiedClaims > 3) {
-    score -= 20; // Many unknowns
-  } else if (unverifiedClaims > 1) {
-    score -= 10; // Some unknowns
-  }
-
-  // Check for reference designs
-  const hasReferenceDesign = /reference.*design|eval.*board|dev.*kit/gi.test(concept.content);
-  if (!hasReferenceDesign) {
-    score -= 10; // No proven starting point
-  }
-
-  return Math.max(10, score); // Floor at 10
-}
-```
+Evaluate `technical_feasibility` dimension (start at 90, apply deductions):
+- Configuration mapping absent → -10
+- Configuration mapping infeasible → return 10 immediately
+- Overloaded terms not disambiguated → -20
+- Unverified technical claims > 3 → -20; claims > 1 → -10
+- No reference design found → -10
+- Floor at 10.
 
 
 ### MCDA WEIGHTED CONFIDENCE CALCULATION
@@ -2847,63 +1792,29 @@ Where:
 ```
 
 **Weights:**
-```javascript
-const weights = {
-  requirements_coverage: 0.20,  // 20%
-  technical_feasibility: 0.25,  // 25%
-  physical_topology: 0.20,      // 20%
-  part_availability: 0.15,      // 15%
-  cost: 0.12,                   // 12%
-  complexity: 0.08              // 8%
-};
-```
 
-**Implementation:**
+| Dimension | Weight |
+|-----------|--------|
+| requirements_coverage | 0.20 (20%) |
+| technical_feasibility | 0.25 (25%) |
+| physical_topology | 0.20 (20%) |
+| part_availability | 0.15 (15%) |
+| cost | 0.12 (12%) |
+| complexity | 0.08 (8%) |
 
-```javascript
-function calculateWeightedConfidence(dimensionScores, weights) {
-  // Verify weights sum to 1.0
-  const weightSum = Object.values(weights).reduce((sum, w) => sum + w, 0);
-  if (Math.abs(weightSum - 1.0) > 0.01) {
-    throw new Error(`Weights must sum to 1.0, got ${weightSum}`);
-  }
-
-  // Apply additive model: V = Σ(Score_i × Weight_i)
-  const confidence =
-    (dimensionScores.requirements_coverage * weights.requirements_coverage) +
-    (dimensionScores.technical_feasibility * weights.technical_feasibility) +
-    (dimensionScores.physical_topology * weights.physical_topology) +
-    (dimensionScores.part_availability * weights.part_availability) +
-    (dimensionScores.cost * weights.cost) +
-    (dimensionScores.complexity * weights.complexity);
-
-  return Math.round(confidence * 10) / 10; // Round to 1 decimal place
-}
-```
+Verify weights sum to 1.0 before calculating. Apply additive model: multiply each score by its weight and sum all six products. Round result to 1 decimal place.
 
 **Example calculation (6 dimensions):**
 
-```javascript
-// Example scores
-const scores = {
-  requirements_coverage: 85,
-  technical_feasibility: 70,
-  physical_topology: 90,
-  part_availability: 90,
-  cost: 60,
-  complexity: 75
-};
-
-// Calculate
-const confidence =
-  (85 * 0.20) +  // 17.0
-  (70 * 0.25) +  // 17.5
-  (90 * 0.20) +  // 18.0 (physical topology)
-  (90 * 0.15) +  // 13.5
-  (60 * 0.12) +  // 7.2
-  (75 * 0.08);   // 6.0
-// = 79.2%
-```
+| Dimension | Score | Weight | Product |
+|-----------|-------|--------|---------|
+| requirements_coverage | 85 | 0.20 | 17.0 |
+| technical_feasibility | 70 | 0.25 | 17.5 |
+| physical_topology | 90 | 0.20 | 18.0 |
+| part_availability | 90 | 0.15 | 13.5 |
+| cost | 60 | 0.12 | 7.2 |
+| complexity | 75 | 0.08 | 6.0 |
+| **Total** | | | **79.2%** |
 
 **Add ## Validation section to each concept file:**
 
@@ -2932,42 +1843,15 @@ Apply validation gate based on calculated confidence scores.
 
 **Decision logic:**
 
-```javascript
-function applyValidationGate(concepts, threshold) {
-  const passed = [];
-  const failed = [];
-  const borderline = [];
+For each concept, classify by confidence vs. threshold:
 
-  concepts.forEach(concept => {
-    const confidence = concept.confidenceScore;
+| Condition | Classification | Status |
+|-----------|----------------|--------|
+| confidence ≥ threshold + 5 | Auto-pass | `auto_passed` |
+| threshold ≤ confidence < threshold + 5 | Borderline | `needs_approval` |
+| confidence < threshold | Auto-fail | `auto_failed` |
 
-    if (confidence >= threshold + 5) {
-      // Auto-pass: High confidence (≥85% if threshold=80)
-      passed.push({
-        ...concept,
-        validation_status: 'auto_passed',
-        reason: `High confidence (≥${threshold + 5}%)`
-      });
-    } else if (confidence >= threshold && confidence < threshold + 5) {
-      // Borderline: Request user approval (80-85% if threshold=80)
-      borderline.push({
-        ...concept,
-        validation_status: 'needs_approval',
-        reason: `Borderline confidence (${threshold}-${threshold + 5}%)`
-      });
-    } else {
-      // Auto-fail: Below threshold
-      failed.push({
-        ...concept,
-        validation_status: 'auto_failed',
-        reason: `Low confidence (${confidence.toFixed(1)}% < ${threshold}%)`
-      });
-    }
-  });
-
-  return { passed, failed, borderline };
-}
-```
+Example with threshold = 80: ≥85% = auto-pass, 80-85% = borderline, <80% = auto-fail.
 
 **Outcomes:**
 
@@ -2977,23 +1861,16 @@ function applyValidationGate(concepts, threshold) {
 
 **All concepts fail scenario:**
 
-If all concepts score <threshold:
-```javascript
-if (passed.length === 0 && borderline.length === 0) {
-  const highestScore = Math.max(...concepts.map(c => c.confidenceScore));
-  const highestConcept = concepts.find(c => c.confidenceScore === highestScore);
-
-  console.log(`All ${concepts.length} concepts failed validation (< ${threshold}% threshold).`);
-  console.log(`Highest score: ${highestConcept.name} (${highestScore.toFixed(1)}%)`);
-  console.log('\nRecommendations:');
-  console.log('1. Revise requirements to expand design space');
-  console.log(`2. Lower threshold to ${highestScore.toFixed(0)}% to proceed with best option`);
-  console.log('3. Return to Phase 2 with different architectural constraints');
-  console.log('4. Proceed with highest-scoring concept accepting higher risk');
-
-  // Request user decision
-}
-```
+If no concepts are auto-passed or borderline:
+- Find the highest-scoring concept (best fallback)
+- Report to user: `All {N} concepts failed validation (< {threshold}% threshold).`
+- Report highest scorer: `Highest score: {name} ({score}%)`
+- Present four options:
+  1. Revise requirements to expand design space
+  2. Lower threshold to `{highest_score}%` to proceed with best option
+  3. Return to Phase 2 with different architectural constraints
+  4. Proceed with highest-scoring concept accepting higher risk
+- Await user decision before continuing
 
 ### OUTPUT
 
@@ -3021,54 +1898,58 @@ if (passed.length === 0 && borderline.length === 0) {
 **User decision required for borderline concepts.**
 ```
 
-**3. Update state file** `.librespin/state.md` — set `phase` to `3-validation-gate`:
-
-```javascript
-const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
-const updatedState = existingState.replace(/^phase: .+$/m, `phase: '3-validation-gate'`);
-fs.writeFileSync('.librespin/state.md', updatedState);
-```
+**3. Update state file** `.librespin/state.md` — replace the `phase:` line value with `'3-validation-gate'`.
 
 ### ERROR HANDLING
 
-**Invalid configuration:**
-```javascript
-if (threshold < 60 || threshold > 95) {
-  throw new Error(`Invalid confidence_threshold: ${threshold}. Must be integer 60-95.`);
-}
-```
+**Invalid configuration:** If `confidence_threshold` is outside 60-95 range, stop immediately with: `Invalid confidence_threshold: {value}. Must be integer 60-95.`
 
-**Missing concept files:**
-```javascript
-if (conceptFiles.length === 0) {
-  throw new Error(`No concept files found. Run Phase 2 first.`);
-}
-```
+**Missing concept files:** If no `concept-*.md` files exist in `.librespin/02-concepts/`, stop with: `No concept files found. Run Phase 2 first.`
 
-**All concepts fail:**
-```javascript
-// Present options to user (see "All concepts fail scenario" above)
-```
+**All concepts fail:** Present options to user (see "All concepts fail scenario" above).
 
 ### COMPLETION SUMMARY
 
-After validation complete:
+After validation complete, report:
+- Total concepts evaluated
+- Counts for passed, borderline, and failed
+- Path to validation summary: `.librespin/03-validation/validation-summary.md`
+- If passing concepts exist: `Next: Run Phase 2 (Component Research) for passing concepts.`
+- If all failed: `All concepts failed validation. Review recommendations above.`
 
-```javascript
-console.log(`\nPhase 3 (Validation Gate) complete.`);
-console.log(`Evaluated: ${concepts.length} concepts`);
-console.log(`Passed: ${passed.length}, Borderline: ${borderline.length}, Failed: ${failed.length}`);
-console.log(`\nValidation summary: .librespin/03-validation/validation-summary.md`);
-if (passed.length > 0 || borderline.length > 0) {
-  console.log(`\nNext: Run Phase 2 (Component Research) for passing concepts.`);
-} else {
-  console.log(`\nAll concepts failed validation. Review recommendations above.`);
-}
-```
 
 ## PHASE 4: COMPONENT RESEARCH
 
 Select specific parts with part numbers for validated architecture concepts (those passing Phase 1 >=80% threshold). Research focuses on active lifecycle status, availability, and verified specifications. Only validated concepts receive component research - prevents wasting effort on unfeasible architectures.
+
+### API-FIRST RULE (MANDATORY — run this before any component research)
+
+Check `~/.librespin/credentials` for configured distributor APIs:
+
+```bash
+CREDS_FILE="$HOME/.librespin/credentials"
+HAS_DIGIKEY=0; HAS_NEXAR=0; HAS_MOUSER=0
+
+if [ -f "$CREDS_FILE" ] && command -v jq > /dev/null 2>&1; then
+  HAS_DIGIKEY=$(grep -A5 '^\[digikey\]' "$CREDS_FILE" | grep -c 'client_id = .')
+  HAS_NEXAR=$(grep -A5 '^\[nexar\]' "$CREDS_FILE" | grep -c 'client_id = .')
+  HAS_MOUSER=$(grep -A5 '^\[mouser\]' "$CREDS_FILE" | grep -c 'part_api_key = .')
+fi
+
+if [ $((HAS_DIGIKEY + HAS_NEXAR + HAS_MOUSER)) -gt 0 ]; then
+  echo "[Phase 4] Distributor APIs configured — using APIs as primary source for pricing/stock/lifecycle."
+  echo "[Phase 4] WebSearch/WebFetch MAY only be used for: parts not found in any API, datasheets, or suppliers not covered by configured APIs."
+  API_MODE=true
+else
+  echo "[Phase 4] No distributor APIs configured. Using web search with estimated pricing."
+  echo "[Phase 4] Run /librespin:setup to configure APIs for accurate pricing and live stock data."
+  API_MODE=false
+fi
+```
+
+**If `API_MODE=true`:** For every component with a non-generic MPN, call `enrich_component "$MPN"` (defined in the DISTRIBUTOR ENRICHMENT section below) DURING the research loop — before scoring and before writing the BOM entry. Use the returned API data as the primary source for price, stock, and lifecycle in the balanced scorecard. Do NOT use WebSearch to obtain pricing or stock for any part where an API returned data.
+
+**If `API_MODE=false`:** Use WebSearch/WebFetch as normal. Mark all prices as `est.` in BOM output (e.g. `est. $1.36`). Log: `[Phase 4] Price from web search — configure /librespin:setup for verified pricing.` on each BOM line.
 
 ### OVERVIEW
 
@@ -3083,78 +1964,21 @@ Select specific parts with part numbers for validated architecture concepts (tho
 
 Load settings from config file:
 
-```javascript
-const yaml = require('js-yaml');
-const fs = require('fs');
-
-// Read configuration
-const configPath = '.librespin/config.yaml';
-const config = yaml.load(fs.readFileSync(configPath, 'utf8'), {
-  schema: yaml.FAILSAFE_SCHEMA
-});
-
-// Validate confidence_threshold (used to filter validated concepts)
-const threshold = config.confidence_threshold;
-if (typeof threshold !== 'number' || threshold < 60 || threshold > 95) {
-  throw new Error(`Invalid confidence_threshold: ${threshold}. Must be integer 60-95. Check ${configPath}`);
-}
-
-console.log(`Component research for concepts with confidence >= ${threshold}%`);
-```
+- Read `.librespin/config.yaml` using YAML parser.
+- Extract `confidence_threshold` field.
+- Validate: must be a number between 60 and 95. If invalid, stop with: `Invalid confidence_threshold: {value}. Must be integer 60-95. Check .librespin/config.yaml`
+- Log: `Component research for concepts with confidence >= {threshold}%`
 
 ### VALIDATED CONCEPT LOADING
 
 Load only concepts that passed Phase 1 validation:
 
-```javascript
-const conceptsDir = '.librespin/02-concepts/';
-const validationSummaryPath = '.librespin/03-validation/validation-summary.md';
-
-// Check validation summary exists
-if (!fs.existsSync(validationSummaryPath)) {
-  throw new Error(`Validation summary not found: ${validationSummaryPath}. Run Phase 1 first.`);
-}
-
-// Read all concept files
-const conceptFiles = fs.readdirSync(conceptsDir)
-  .filter(f => f.startsWith('concept-') && f.endsWith('.md'));
-
-if (conceptFiles.length === 0) {
-  throw new Error(`No concept files found in ${conceptsDir}. Run Phase 2 first.`);
-}
-
-// Filter to validated concepts only
-const validatedConcepts = [];
-
-conceptFiles.forEach(file => {
-  const content = fs.readFileSync(`${conceptsDir}/${file}`, 'utf8');
-
-  // Parse validation status from ## Validation section
-  const validationMatch = content.match(/validation_status:\s*['"]?(auto_passed|needs_approval)['"]?/i);
-  const confidenceMatch = content.match(/Confidence Score:\s*([\d.]+)%/);
-
-  if (validationMatch) {
-    const status = validationMatch[1];
-    const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]) : 0;
-
-    // Accept auto_passed (>=85%) or needs_approval (80-85%, user approved)
-    if (status === 'auto_passed' || status === 'needs_approval') {
-      validatedConcepts.push({
-        file,
-        status,
-        confidence,
-        content
-      });
-    }
-  }
-});
-
-if (validatedConcepts.length === 0) {
-  throw new Error(`No validated concepts found (>=${threshold}% confidence). Run Phase 1 first or lower threshold.`);
-}
-
-console.log(`Found ${validatedConcepts.length} validated concepts for component research.`);
-```
+- Check that `.librespin/03-validation/validation-summary.md` exists. If not, stop with: `Validation summary not found. Run Phase 1 first.`
+- Read all `concept-*.md` files from `.librespin/02-concepts/`. If none found, stop with: `No concept files found in .librespin/02-concepts/. Run Phase 2 first.`
+- For each concept file, parse the `## Validation` section for `validation_status`. Accept only `auto_passed` or `needs_approval`.
+- Also parse `Confidence Score:` to capture the numeric value.
+- If no validated concepts found, stop with: `No validated concepts found (>={threshold}% confidence). Run Phase 1 first or lower threshold.`
+- Log: `Found {N} validated concepts for component research.`
 
 ### CRITICAL: DATASHEET VERIFICATION PROTOCOL
 
@@ -3170,371 +1994,41 @@ console.log(`Found ${validatedConcepts.length} validated concepts for component 
 
 Extract all active components from requirements and concept architectures:
 
-```javascript
-function identifyDatasheetRequirements(requirements, concepts) {
-  const componentsNeedingDatasheets = new Set();
+- From requirements `interfaces.uart_channels`: any channel with `location = 'onboard'` → CRITICAL, reason: `Onboard device power requirements needed`
+- From concept block diagrams: extract bridge ICs (FT-series, CH-series, MCP-series, CY7C-series) → CRITICAL, reason: `SPI Mode 1 support, GPIO count, speed verification required`
+- USB hub ICs (USB-prefix pattern) → HIGH, reason: `Port count, power distribution, lifecycle verification`
+- Power ICs (LM-series, TPS-series, ADP-series) → CRITICAL, reason: `Input voltage range, output current, efficiency verification`
 
-  // From requirements: onboard devices
-  if (requirements.interfaces?.uart_channels) {
-    requirements.interfaces.uart_channels.forEach(channel => {
-      if (channel.location === 'onboard') {
-        componentsNeedingDatasheets.add({
-          name: channel.device,
-          type: 'uart_device',
-          criticality: 'CRITICAL',
-          reason: 'Onboard device power requirements needed'
-        });
-      }
-    });
-  }
-
-  // From concepts: bridge ICs, USB hubs, power ICs
-  concepts.forEach(concept => {
-    // Extract from block diagram or assumptions section
-    const blockDiagram = extractBlockDiagram(concept.content);
-
-    // USB-to-SPI/UART bridge ICs (CRITICAL)
-    const bridgeICs = blockDiagram.match(/FT\d+[A-Z]+|CH\d+[A-Z]+|MCP\d+|CY7C\d+/g);
-    if (bridgeICs) {
-      bridgeICs.forEach(ic => {
-        componentsNeedingDatasheets.add({
-          name: ic,
-          type: 'bridge_ic',
-          criticality: 'CRITICAL',
-          reason: 'SPI Mode 1 support, GPIO count, speed verification required'
-        });
-      });
-    }
-
-    // USB hubs (if present)
-    const hubICs = blockDiagram.match(/USB\d+[A-Z]*/g);
-    if (hubICs) {
-      hubICs.forEach(ic => {
-        componentsNeedingDatasheets.add({
-          name: ic,
-          type: 'usb_hub',
-          criticality: 'HIGH',
-          reason: 'Port count, power distribution, lifecycle verification'
-        });
-      });
-    }
-
-    // Power ICs (buck converters, LDOs)
-    const powerICs = blockDiagram.match(/LM\d+[A-Z]*|TPS\d+[A-Z]*|ADP\d+[A-Z]*/g);
-    if (powerICs) {
-      powerICs.forEach(ic => {
-        componentsNeedingDatasheets.add({
-          name: ic,
-          type: 'power_ic',
-          criticality: 'CRITICAL',
-          reason: 'Input voltage range, output current, efficiency verification'
-        });
-      });
-    }
-  });
-
-  return Array.from(componentsNeedingDatasheets);
-}
-
-const requiredDatasheets = identifyDatasheetRequirements(requirements, validatedConcepts);
-console.log(`Identified ${requiredDatasheets.length} components requiring datasheet verification.`);
-```
+Collect all identified components into a deduplicated list, noting name, type, and criticality.
 
 ---
 
 #### Step 2: Datasheet Retrieval and Parsing
 
-For each component, attempt to retrieve official manufacturer datasheet:
+For each component requiring a datasheet:
 
-```javascript
-async function retrieveAndParseDatasheet(component) {
-  console.log(`\n[DATASHEET] Retrieving: ${component.name}`);
-
-  // Step 2a: Search for official datasheet PDF
-  const datasheetSearch = await WebSearch({
-    query: `${component.name} datasheet PDF site:*.com filetype:pdf`
-  });
-
-  // Prioritize manufacturer domains (ti.com, ftdichip.com, microchip.com, etc.)
-  const manufacturerDomains = ['ti.com', 'ftdichip.com', 'microchip.com', 'onsemi.com',
-                               'analog.com', 'infineon.com', 'nxp.com', 'st.com'];
-
-  const datasheetURL = datasheetSearch.links.find(link =>
-    manufacturerDomains.some(domain => link.url.includes(domain)) &&
-    link.url.toLowerCase().includes('pdf')
-  );
-
-  if (!datasheetURL) {
-    console.warn(`⚠️  WARNING: No manufacturer datasheet found for ${component.name}`);
-    console.warn(`   Searched: ${datasheetSearch.query}`);
-    console.warn(`   ACTION REQUIRED: User must obtain datasheet manually`);
-    return {
-      component: component.name,
-      status: 'NOT_FOUND',
-      verified: false,
-      error: 'Manufacturer datasheet PDF not accessible via web search'
-    };
-  }
-
-  console.log(`[DATASHEET] Found: ${datasheetURL.url}`);
-
-  // Step 2b: Download PDF to local disk
-  const datasheetDir = '.librespin/04-component-research/datasheets';
-  const pdfFilename = `${component.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-  const pdfPath = `${datasheetDir}/${pdfFilename}`;
-  const txtPath = `${datasheetDir}/${pdfFilename}.txt`;
-
-  console.log(`[DATASHEET] Downloading to: ${pdfPath}`);
-
-  // Create datasheets directory if doesn't exist
-  await Bash({
-    command: `mkdir -p "${datasheetDir}"`,
-    description: 'Create datasheets directory'
-  });
-
-  // Download PDF using curl
-  const downloadResult = await Bash({
-    command: `curl -L -o "${pdfPath}" "${datasheetURL.url}"`,
-    description: `Download ${component.name} datasheet PDF`,
-    timeout: 30000  // 30 second timeout for large PDFs
-  });
-
-  if (downloadResult.exitCode !== 0) {
-    console.error(`   DOWNLOAD FAILED: ${downloadResult.stderr}`);
-    return {
-      component: component.name,
-      status: 'DOWNLOAD_FAILED',
-      url: datasheetURL.url,
-      verified: false,
-      error: `PDF download failed: ${downloadResult.stderr}`
-    };
-  }
-
-  // Verify PDF downloaded and has content
-  const pdfSizeResult = await Bash({
-    command: `stat -f%z "${pdfPath}" 2>/dev/null || stat -c%s "${pdfPath}" 2>/dev/null`,
-    description: 'Check PDF file size'
-  });
-
-  const pdfSize = parseInt(pdfSizeResult.stdout.trim());
-  if (pdfSize < 1000) {  // Less than 1KB likely indicates error page
-    console.error(`   DOWNLOAD FAILED: PDF too small (${pdfSize} bytes), likely error page`);
-    return {
-      component: component.name,
-      status: 'DOWNLOAD_FAILED',
-      url: datasheetURL.url,
-      verified: false,
-      error: `Downloaded file too small (${pdfSize} bytes), likely not actual datasheet`
-    };
-  }
-
-  console.log(`[DATASHEET] Downloaded: ${pdfSize} bytes`);
-
-  // Step 2c: Extract text from PDF using Python pdfplumber
-  console.log(`[DATASHEET] Extracting text from PDF...`);
-
-  const extractResult = await Bash({
-    command: `python3 -c "
-import sys
-try:
-    import pdfplumber
-except ImportError:
-    print('ERROR: pdfplumber not installed. Install with: pip3 install pdfplumber', file=sys.stderr)
-    sys.exit(1)
-
-pdf_path = '${pdfPath}'
-txt_path = '${txtPath}'
-
-try:
-    with pdfplumber.open(pdf_path) as pdf:
-        text = ''
-        for i, page in enumerate(pdf.pages):
-            text += f'\\n--- PAGE {i+1} ---\\n'
-            text += page.extract_text() or ''
-
-        with open(txt_path, 'w', encoding='utf-8') as f:
-            f.write(text)
-
-        print(f'Extracted {len(text)} characters from {len(pdf.pages)} pages')
-except Exception as e:
-    print(f'ERROR: {str(e)}', file=sys.stderr)
-    sys.exit(1)
-"`,
-    description: `Extract text from ${component.name} PDF using pdfplumber`,
-    timeout: 60000  // 60 second timeout for large PDFs
-  });
-
-  if (extractResult.exitCode !== 0) {
-    console.error(`   EXTRACTION FAILED: ${extractResult.stderr}`);
-
-    // If pdfplumber not installed, provide clear instructions
-    if (extractResult.stderr.includes('pdfplumber not installed')) {
-      console.error(`\n   ⚠️  CRITICAL: pdfplumber not installed`);
-      console.error(`      Install with: pip3 install pdfplumber`);
-      console.error(`      Or use alternative: pip3 install PyPDF2`);
-      throw new Error('pdfplumber required for PDF text extraction. Install with: pip3 install pdfplumber');
-    }
-
-    return {
-      component: component.name,
-      status: 'EXTRACTION_FAILED',
-      url: datasheetURL.url,
-      pdf_path: pdfPath,
-      verified: false,
-      error: `PDF text extraction failed: ${extractResult.stderr}`
-    };
-  }
-
-  console.log(`[DATASHEET] Extraction: ${extractResult.stdout.trim()}`);
-
-  // Step 2d: Read extracted text file
-  const datasheetContent = await Read({
-    file_path: txtPath
-  });
-
-  console.log(`[DATASHEET] Text file read: ${datasheetContent.split('\n').length} lines`);
-
-  return {
-    component: component.name,
-    status: 'RETRIEVED',
-    url: datasheetURL.url,
-    pdf_path: pdfPath,
-    txt_path: txtPath,
-    content: datasheetContent,
-    verified: false  // Not yet verified
-  };
-}
-
-// Retrieve all datasheets in parallel (with rate limiting)
-const datasheetPromises = requiredDatasheets.map(comp => retrieveAndParseDatasheet(comp));
-const retrievedDatasheets = await Promise.all(datasheetPromises);
-
-// Separate into retrieved vs not found
-const successfulRetrievals = retrievedDatasheets.filter(d => d.status === 'RETRIEVED');
-const failedRetrievals = retrievedDatasheets.filter(d => d.status === 'NOT_FOUND');
-
-console.log(`\n[DATASHEET] Retrieved: ${successfulRetrievals.length}/${requiredDatasheets.length}`);
-if (failedRetrievals.length > 0) {
-  console.error(`\n⚠️  CRITICAL: ${failedRetrievals.length} datasheets NOT FOUND:`);
-  failedRetrievals.forEach(d => console.error(`   - ${d.component}`));
-  console.error(`\n   ACTION: User must manually obtain datasheets for above components.`);
-  console.error(`   WORKFLOW: HALT until all datasheets retrieved.`);
-  throw new Error(`Cannot proceed without datasheets for: ${failedRetrievals.map(d => d.component).join(', ')}`);
-}
-```
+1. Search for the official manufacturer PDF: query `{component_name} datasheet PDF site:*.com filetype:pdf`
+2. Prioritize manufacturer domains (in order): ti.com, ftdichip.com, microchip.com, onsemi.com, analog.com, infineon.com, nxp.com, st.com
+3. If no manufacturer datasheet found: warn `WARNING: No manufacturer datasheet found for {component}. ACTION REQUIRED: User must obtain datasheet manually.` Return status `NOT_FOUND`.
+4. If found: download PDF to `.librespin/04-component-research/datasheets/{component_name}.pdf`
+5. Verify download: file must be ≥1KB. If smaller: status `DOWNLOAD_FAILED`, warn it's likely an error page.
+6. Extract text from PDF using `pdfplumber` (Python): `pip3 install pdfplumber` if not available. Write extracted text to `.librespin/04-component-research/datasheets/{component_name}.pdf.txt`
+7. If extraction fails due to missing pdfplumber: stop with `pdfplumber required for PDF text extraction. Install with: pip3 install pdfplumber`
+8. If all critical components retrieved: proceed. If any `NOT_FOUND`: halt with `Cannot proceed without datasheets for: {component_list}`
 
 ---
 
 #### Step 3: Datasheet Reading and Specification Extraction
 
-For each retrieved datasheet, extract critical specifications:
+For each retrieved datasheet, extract critical specifications by component type:
 
-```javascript
-function extractCriticalSpecifications(datasheet, componentType) {
-  const specs = {
-    component: datasheet.component,
-    datasheet_url: datasheet.url,
-    extracted_specs: {},
-    extraction_confidence: 0,
-    warnings: []
-  };
+**bridge_ic:** Extract SPI mode support (`SPI Mode 1` or `CPOL=0, CPHA=1`), GPIO count, max SPI speed in MHz/Mbps.
 
-  // Type-specific extraction
-  switch(componentType) {
-    case 'bridge_ic':
-      // SPI Mode support (CRITICAL)
-      const spiModeMatch = datasheet.content.match(/SPI.*(Mode|CPOL|CPHA)/gi);
-      if (spiModeMatch) {
-        specs.extracted_specs.spi_modes = spiModeMatch;
-        specs.extracted_specs.spi_mode_1_supported = datasheet.content.match(/Mode 1|CPOL=0.*CPHA=1/i) ? 'YES' : 'VERIFY';
-      } else {
-        specs.warnings.push('SPI mode information not found in extracted content');
-      }
+**uart_device / onboard_device:** Extract supply voltage (V), supply current (mA), output power (W) if applicable.
 
-      // GPIO count
-      const gpioMatch = datasheet.content.match(/(\d+).*GPIO/i);
-      if (gpioMatch) {
-        specs.extracted_specs.gpio_count = parseInt(gpioMatch[1]);
-      }
+**power_ic:** Extract input voltage range (min-max V), output current (mA/A), efficiency (%).
 
-      // Max SPI speed
-      const speedMatch = datasheet.content.match(/(\d+)\s*(MHz|Mbps).*SPI/i);
-      if (speedMatch) {
-        specs.extracted_specs.max_spi_speed = `${speedMatch[1]} ${speedMatch[2]}`;
-      }
-      break;
-
-    case 'uart_device':
-    case 'onboard_device':
-      // Supply voltage (CRITICAL)
-      const voltageMatch = datasheet.content.match(/Supply Voltage.*?(\d+\.?\d*)\s*V/i);
-      if (voltageMatch) {
-        specs.extracted_specs.supply_voltage = `${voltageMatch[1]}V`;
-      } else {
-        specs.warnings.push('CRITICAL: Supply voltage not found');
-      }
-
-      // Supply current (CRITICAL)
-      const currentMatch = datasheet.content.match(/Supply Current.*?(\d+\.?\d*)\s*(mA|A)/i);
-      if (currentMatch) {
-        specs.extracted_specs.supply_current = `${currentMatch[1]} ${currentMatch[2]}`;
-      } else {
-        specs.warnings.push('CRITICAL: Supply current not found');
-      }
-
-      // Output power (for power calculation sanity check)
-      const powerMatch = datasheet.content.match(/Output Power.*?(\d+\.?\d*)\s*W/i);
-      if (powerMatch) {
-        specs.extracted_specs.output_power = `${powerMatch[1]}W`;
-      }
-      break;
-
-    case 'power_ic':
-      // Input voltage range
-      const vinMatch = datasheet.content.match(/Input Voltage.*?(\d+\.?\d*)\s*-\s*(\d+\.?\d*)\s*V/i);
-      if (vinMatch) {
-        specs.extracted_specs.input_voltage_range = `${vinMatch[1]}-${vinMatch[2]}V`;
-      }
-
-      // Output current
-      const ioutMatch = datasheet.content.match(/Output Current.*?(\d+\.?\d*)\s*(mA|A)/i);
-      if (ioutMatch) {
-        specs.extracted_specs.output_current = `${ioutMatch[1]} ${ioutMatch[2]}`;
-      }
-
-      // Efficiency
-      const effMatch = datasheet.content.match(/Efficiency.*?(\d+)%/i);
-      if (effMatch) {
-        specs.extracted_specs.efficiency = `${effMatch[1]}%`;
-      }
-      break;
-  }
-
-  // Calculate extraction confidence (0-100%)
-  const expectedFields = {
-    'bridge_ic': ['spi_modes', 'gpio_count', 'max_spi_speed'],
-    'uart_device': ['supply_voltage', 'supply_current'],
-    'power_ic': ['input_voltage_range', 'output_current']
-  };
-
-  const expected = expectedFields[componentType] || [];
-  const extracted = Object.keys(specs.extracted_specs);
-  specs.extraction_confidence = (extracted.length / expected.length) * 100;
-
-  if (specs.extraction_confidence < 80) {
-    specs.warnings.push(`LOW EXTRACTION CONFIDENCE: ${specs.extraction_confidence}% (expected ${expected.length} fields, found ${extracted.length})`);
-  }
-
-  return specs;
-}
-
-const extractedSpecs = successfulRetrievals.map(ds => {
-  const componentType = requiredDatasheets.find(c => c.name === ds.component)?.type;
-  return extractCriticalSpecifications(ds, componentType);
-});
-
-console.log(`\n[SPECS] Extracted specifications from ${extractedSpecs.length} datasheets.`);
-```
+After extraction, calculate extraction confidence: number of expected fields extracted / total expected fields × 100%. Warn if confidence < 80%.
 
 ---
 
@@ -3542,217 +2036,50 @@ console.log(`\n[SPECS] Extracted specifications from ${extractedSpecs.length} da
 
 Before verification, perform physics-based sanity checks:
 
-```javascript
-function sanityCheckElectricalSpecs(specs) {
-  const failures = [];
+- **Onboard device with output power:** Verify supply current ≥ (output_power / supply_voltage / 0.85) × 1000 mA (allow 50% margin). If current is too low: CRITICAL failure — `Supply current {value}mA too low for {power}W output`
+- **Power IC:** Verify that the source voltage (from requirements, e.g., 24V DC) falls within the IC's input voltage range. If outside: CRITICAL failure — `Source voltage {V}V outside IC range {min}-{max}V`
 
-  // For onboard devices with output power: verify supply current makes sense
-  if (specs.extracted_specs.output_power && specs.extracted_specs.supply_current) {
-    const outputPower = parseFloat(specs.extracted_specs.output_power);
-    const supplyCurrent = parseFloat(specs.extracted_specs.supply_current);
-    const supplyVoltage = parseFloat(specs.extracted_specs.supply_voltage);
-
-    // Minimum supply current = output power / supply voltage / efficiency (assume 85%)
-    const minSupplyCurrent = (outputPower / supplyVoltage / 0.85) * 1000; // in mA
-
-    if (supplyCurrent < minSupplyCurrent * 0.5) {  // Allow 50% margin for error
-      failures.push({
-        component: specs.component,
-        check: 'supply_current_vs_output_power',
-        issue: `Supply current ${supplyCurrent}mA too low for ${outputPower}W output`,
-        calculation: `Minimum: ${outputPower}W / ${supplyVoltage}V / 0.85 = ${minSupplyCurrent.toFixed(0)}mA`,
-        severity: 'CRITICAL'
-      });
-    }
-  }
-
-  // For power ICs: verify input voltage range includes source voltage
-  if (specs.extracted_specs.input_voltage_range) {
-    const sourceVoltage = 24; // From requirements (24V DC input)
-    const vinRange = specs.extracted_specs.input_voltage_range.match(/(\d+)-(\d+)V/);
-    if (vinRange) {
-      const vinMin = parseFloat(vinRange[1]);
-      const vinMax = parseFloat(vinRange[2]);
-
-      if (sourceVoltage < vinMin || sourceVoltage > vinMax) {
-        failures.push({
-          component: specs.component,
-          check: 'input_voltage_compatibility',
-          issue: `Source voltage ${sourceVoltage}V outside IC range ${vinMin}-${vinMax}V`,
-          severity: 'CRITICAL'
-        });
-      }
-    }
-  }
-
-  return failures;
-}
-
-const sanityCheckFailures = extractedSpecs.flatMap(spec => sanityCheckElectricalSpecs(spec));
-
-if (sanityCheckFailures.length > 0) {
-  console.error(`\n⚠️  SANITY CHECK FAILURES: ${sanityCheckFailures.length} issues detected`);
-  sanityCheckFailures.forEach(failure => {
-    console.error(`   [${failure.severity}] ${failure.component}: ${failure.issue}`);
-    if (failure.calculation) console.error(`      Calculation: ${failure.calculation}`);
-  });
-
-  // CRITICAL failures halt workflow
-  const criticalFailures = sanityCheckFailures.filter(f => f.severity === 'CRITICAL');
-  if (criticalFailures.length > 0) {
-    throw new Error(`CRITICAL sanity check failures detected. Cannot proceed with invalid specifications.`);
-  }
-}
-```
+CRITICAL failures halt the workflow: `CRITICAL sanity check failures detected. Cannot proceed with invalid specifications.`
 
 ---
 
 #### Step 5: Spawn Verifier Agent
 
-For each datasheet, spawn a specialized verifier agent to confirm understanding:
+For each datasheet with extracted specs, spawn a verifier agent to confirm understanding:
 
-```javascript
-async function verifyDatasheetUnderstanding(datasheetSpecs) {
-  console.log(`\n[VERIFY] Spawning verifier agent for: ${datasheetSpecs.component}`);
-
-  const verifierPrompt = `You are a datasheet verification agent. Your task is to verify the extracted specifications for ${datasheetSpecs.component} are correct and complete.
-
-DATASHEET URL: ${datasheetSpecs.datasheet_url}
-EXTRACTED SPECIFICATIONS:
-${JSON.stringify(datasheetSpecs.extracted_specs, null, 2)}
-
-EXTRACTION WARNINGS:
-${datasheetSpecs.warnings.join('\n')}
-
-VERIFICATION TASKS:
-1. Access the datasheet at the URL above
-2. Locate the "Absolute Maximum Ratings" and "Electrical Characteristics" tables
-3. Verify each extracted specification matches the datasheet
-4. Identify any missing CRITICAL specifications
-5. Flag any discrepancies between extracted values and datasheet
-
-CRITICAL SPECIFICATIONS (must verify):
-- Supply voltage (exact value with min/typ/max)
-- Supply current (typ and max values)
-- Operating temperature range
-- Key functional parameters (SPI modes for bridge ICs, output current for power ICs)
-
-OUTPUT FORMAT:
-{
-  "component": "${datasheetSpecs.component}",
-  "verified": true/false,
-  "verification_confidence": 0-100,
-  "discrepancies": [
-    {"field": "...", "extracted": "...", "datasheet": "...", "severity": "CRITICAL/HIGH/LOW"}
-  ],
-  "missing_critical_specs": ["...", "..."],
-  "datasheet_section_references": {
-    "supply_voltage": "Table 1, page 5",
-    "supply_current": "Table 2, page 6"
-  }
-}`;
-
-  const verifierAgent = await Agent({
-    subagent_type: 'general-purpose',
-    description: `Verify ${datasheetSpecs.component} datasheet specs`,
-    prompt: verifierPrompt
-  });
-
-  return JSON.parse(verifierAgent.output);
-}
-
-// Verify all datasheets sequentially (to avoid rate limits)
-const verificationResults = [];
-for (const specs of extractedSpecs) {
-  const verification = await verifyDatasheetUnderstanding(specs);
-  verificationResults.push(verification);
-
-  if (!verification.verified) {
-    console.error(`\n❌ VERIFICATION FAILED: ${specs.component}`);
-    console.error(`   Confidence: ${verification.verification_confidence}%`);
-    if (verification.discrepancies.length > 0) {
-      console.error(`   Discrepancies:`);
-      verification.discrepancies.forEach(d => {
-        console.error(`      - ${d.field}: Extracted "${d.extracted}" vs Datasheet "${d.datasheet}" (${d.severity})`);
-      });
-    }
-  } else {
-    console.log(`✅ VERIFIED: ${specs.component} (${verification.verification_confidence}% confidence)`);
-  }
-}
-
-// Check for verification failures
-const failedVerifications = verificationResults.filter(v => !v.verified || v.verification_confidence < 80);
-if (failedVerifications.length > 0) {
-  console.error(`\n⚠️  ${failedVerifications.length} components failed verification:`);
-  failedVerifications.forEach(v => console.error(`   - ${v.component} (${v.verification_confidence}% confidence)`));
-  throw new Error(`Datasheet verification failed for ${failedVerifications.length} components. Cannot proceed.`);
-}
-```
+- Agent receives: datasheet URL, extracted specs (JSON), extraction warnings
+- Agent tasks: access the datasheet URL, locate Absolute Maximum Ratings and Electrical Characteristics tables, verify each extracted spec, identify missing CRITICAL specs, flag discrepancies
+- Agent returns: `verified` (boolean), `verification_confidence` (0-100), `discrepancies` list (field, extracted, datasheet, severity), `missing_critical_specs` list, `datasheet_section_references` map
+- Accept: `verified = true` AND `verification_confidence >= 80`
+- Reject: failed verifications or confidence < 80 → stop with `Datasheet verification failed for {N} components. Cannot proceed.`
 
 ---
 
 #### Step 6: Document Verified Specifications
 
-Create verification matrix documenting ground truth:
+Create `.librespin/04-component-research/datasheet-verification-matrix.md` with this structure per component:
 
-```javascript
-function generateVerificationMatrix(verificationResults, extractedSpecs) {
-  let matrix = `# Datasheet Verification Matrix\n\n`;
-  matrix += `**Generated:** ${new Date().toISOString()}\n`;
-  matrix += `**Components Verified:** ${verificationResults.length}\n\n`;
-  matrix += `---\n\n`;
+```markdown
+## {Component Name}
 
-  verificationResults.forEach((verification, idx) => {
-    const specs = extractedSpecs[idx];
+**Datasheet:** [{Component} Datasheet]({url})
+**Verification Confidence:** {N}%
+**Status:** ✅ VERIFIED or ❌ FAILED
 
-    matrix += `## ${verification.component}\n\n`;
-    matrix += `**Datasheet:** [${verification.component} Datasheet](${specs.datasheet_url})\n`;
-    matrix += `**Verification Confidence:** ${verification.verification_confidence}%\n`;
-    matrix += `**Status:** ${verification.verified ? '✅ VERIFIED' : '❌ FAILED'}\n\n`;
+### Verified Specifications
 
-    matrix += `### Verified Specifications\n\n`;
-    matrix += `| Specification | Value | Datasheet Reference |\n`;
-    matrix += `|---------------|-------|---------------------|\n`;
+| Specification | Value | Datasheet Reference |
+|---------------|-------|---------------------|
+| {spec name} | {value} | {table/page reference} |
 
-    Object.entries(specs.extracted_specs).forEach(([key, value]) => {
-      const reference = verification.datasheet_section_references?.[key] || 'See datasheet';
-      matrix += `| ${key.replace(/_/g, ' ')} | ${value} | ${reference} |\n`;
-    });
+### ⚠️ Discrepancies Found
+- **{field}:** Extracted "{extracted}" vs Datasheet "{actual}" ({severity})
 
-    if (verification.discrepancies && verification.discrepancies.length > 0) {
-      matrix += `\n### ⚠️ Discrepancies Found\n\n`;
-      verification.discrepancies.forEach(d => {
-        matrix += `- **${d.field}:** Extracted "${d.extracted}" vs Datasheet "${d.datasheet}" (${d.severity})\n`;
-      });
-    }
-
-    if (verification.missing_critical_specs && verification.missing_critical_specs.length > 0) {
-      matrix += `\n### ⚠️ Missing Critical Specifications\n\n`;
-      verification.missing_critical_specs.forEach(spec => {
-        matrix += `- ${spec}\n`;
-      });
-    }
-
-    matrix += `\n---\n\n`;
-  });
-
-  return matrix;
-}
-
-const verificationMatrix = generateVerificationMatrix(verificationResults, extractedSpecs);
-
-// Write verification matrix to file
-fs.writeFileSync(
-  '.librespin/04-component-research/datasheet-verification-matrix.md',
-  verificationMatrix
-);
-
-console.log(`\n✅ DATASHEET VERIFICATION COMPLETE`);
-console.log(`   Verified: ${verificationResults.length} components`);
-console.log(`   Matrix: .librespin/04-component-research/datasheet-verification-matrix.md`);
-console.log(`\n   GROUND TRUTH ESTABLISHED. Proceeding to component selection...\n`);
+### ⚠️ Missing Critical Specifications
+- {spec name}
 ```
+
+Log: `GROUND TRUTH ESTABLISHED. Proceeding to component selection...`
 
 ---
 
@@ -3760,59 +2087,22 @@ console.log(`\n   GROUND TRUTH ESTABLISHED. Proceeding to component selection...
 
 For each validated concept, extract component categories from block diagram:
 
-```javascript
-function extractFunctionalBlocks(conceptContent) {
-  const blocks = {
-    active: [],      // MCUs, wireless modules, sensor ICs, power ICs - require MPN
-    commodity: []    // Resistors, capacitors, connectors - generic spec only
-  };
+**Active components** (require specific MPN): detect these patterns in concept content:
+- MCU / Microcontroller / Cortex → category: MCU
+- BLE / Bluetooth / Wireless / LoRa / WiFi / Zigbee / Cellular → category: Wireless
+- Sensor / IMU / Accelerometer / Gyro / Temp / Humidity / Pressure → category: Sensor
+- Buck / Boost / LDO / PMIC / Regulator / Power IC → category: Power IC
+- Motor Driver / Gate Driver / H-Bridge → category: Motor Driver
+- ADC / DAC / Op-Amp / Comparator → category: Analog IC
+- Flash / EEPROM / FRAM / Memory → category: Memory
 
-  // Parse block diagram section
-  const diagramMatch = conceptContent.match(/## Block Diagram[\s\S]*?```[\s\S]*?```/);
-  const diagram = diagramMatch ? diagramMatch[0] : '';
-
-  // Active component detection patterns
-  const activePatterns = [
-    { pattern: /MCU|Microcontroller|Cortex/i, category: 'MCU' },
-    { pattern: /BLE|Bluetooth|Wireless|LoRa|WiFi|Zigbee|Cellular/i, category: 'Wireless' },
-    { pattern: /Sensor|IMU|Accelerometer|Gyro|Temp|Humidity|Pressure/i, category: 'Sensor' },
-    { pattern: /Buck|Boost|LDO|PMIC|Regulator|Power IC/i, category: 'Power IC' },
-    { pattern: /Motor Driver|Gate Driver|H-Bridge/i, category: 'Motor Driver' },
-    { pattern: /ADC|DAC|Op-Amp|Comparator/i, category: 'Analog IC' },
-    { pattern: /Flash|EEPROM|FRAM|Memory/i, category: 'Memory' }
-  ];
-
-  // Commodity component detection patterns
-  const commodityPatterns = [
-    { pattern: /Resistor|(\d+[kK]?Ω)|(\d+R)/i, category: 'Resistor' },
-    { pattern: /Capacitor|(\d+[nupμ]F)/i, category: 'Capacitor' },
-    { pattern: /Inductor|(\d+[nupμ]H)/i, category: 'Inductor' },
-    { pattern: /LED|Status LED/i, category: 'LED' },
-    { pattern: /Connector|JST|Header|USB/i, category: 'Connector' },
-    { pattern: /Crystal|Oscillator/i, category: 'Crystal' }
-  ];
-
-  // Extract active components
-  activePatterns.forEach(({ pattern, category }) => {
-    if (pattern.test(conceptContent)) {
-      if (!blocks.active.includes(category)) {
-        blocks.active.push(category);
-      }
-    }
-  });
-
-  // Extract commodity components
-  commodityPatterns.forEach(({ pattern, category }) => {
-    if (pattern.test(conceptContent)) {
-      if (!blocks.commodity.includes(category)) {
-        blocks.commodity.push(category);
-      }
-    }
-  });
-
-  return blocks;
-}
-```
+**Commodity components** (generic spec only, no MPN):
+- Resistor / Ω values → category: Resistor
+- Capacitor / F values → category: Capacitor
+- Inductor / H values → category: Inductor
+- LED / Status LED → category: LED
+- Connector / JST / Header / USB → category: Connector
+- Crystal / Oscillator → category: Crystal
 
 ### DIGIKEY PARAMETRIC SEARCH WORKFLOW
 
@@ -3825,59 +2115,34 @@ Example: Integrated Circuits > Embedded - Microcontrollers
 ```
 
 **Step 2: Apply Filters from Requirements**
-```javascript
-// Parametric search pattern (manual via web interface)
-const searchParams = {
-  category: "Microcontrollers",
-  filters: {
-    "Core Processor": requirements.mcu_core,           // e.g., "ARM Cortex-M4"
-    "Program Memory Size": `>= ${requirements.flash}`, // e.g., ">= 256KB"
-    "RAM Size": `>= ${requirements.ram}`,              // e.g., ">= 64KB"
-    "Speed": `>= ${requirements.mhz}`,                 // e.g., ">= 100MHz"
-    "Operating Temperature": requirements.tempRange,   // e.g., "-40°C ~ 85°C"
-    "Supplier Device Package": requirements.package    // e.g., "LQFP-64"
-  }
-};
-```
+
+Set parametric filters matching requirements:
+- Core Processor (e.g., ARM Cortex-M4)
+- Program Memory Size (e.g., >= 256KB)
+- RAM Size (e.g., >= 64KB)
+- Speed (e.g., >= 100MHz)
+- Operating Temperature (e.g., -40°C ~ 85°C)
+- Supplier Device Package (e.g., LQFP-64)
 
 **Step 3: Filter by Availability**
-```javascript
-const availabilityFilters = {
-  "Stock Status": "In Stock",           // OR "Normally Stocking"
-  "Lifecycle Status": "Active"          // CRITICAL: avoid NRND
-};
 
-// Additional availability criteria
-const availabilityCriteria = {
-  leadTimeWeeks: 8,       // Max acceptable lead time
-  stockQuantity: 100      // Min acceptable stock
-};
-```
+Apply these availability criteria:
+- Stock Status: "In Stock" or "Normally Stocking"
+- Lifecycle Status: "Active" (CRITICAL — avoid NRND)
+- Lead Time: ≤8 weeks maximum
+- Minimum Stock Quantity: ≥100 units
 
 **Step 4: Sort by Price or Quantity**
-```
-Sort by: Price (ascending) for cost optimization
-     OR: Quantity Available (descending) for availability
-```
+
+Sort ascending by price for cost optimization, or descending by quantity available for reliability.
 
 **Step 5: Extract Top 5-10 Candidates**
-```javascript
-// Extract key fields from search results
-const candidateFields = [
-  'Manufacturer Part Number',
-  'Manufacturer',
-  'Description',
-  'Unit Price (USD)',
-  'Quantity Available',
-  'Lead Time',
-  'Lifecycle Status',
-  'Datasheet URL'
-];
-```
+
+For each candidate, record: Manufacturer Part Number, Manufacturer, Description, Unit Price (USD), Quantity Available, Lead Time, Lifecycle Status, Datasheet URL.
 
 ### BALANCED SCORECARD EVALUATION
 
-Score candidate parts using weighted criteria (per CONTEXT.md decisions):
+Score candidate parts using weighted criteria:
 
 **Weights:**
 - Cost: 35%
@@ -3895,161 +2160,42 @@ Score candidate parts using weighted criteria (per CONTEXT.md decisions):
 | 2 | $15-30 | 10-50 stock, <8 wk | Meets most, minor gaps | Lesser-known vendor |
 | 1 | >$30 | <10 stock, >8 wk | Does not meet specs | Unknown vendor |
 
-**Implementation:**
+**Score each dimension (1-5 scale):**
 
-```javascript
-function evaluateComponent(part, requirements) {
-  // Weights from CONTEXT.md decisions
-  const weights = {
-    cost: 0.35,
-    availability: 0.30,
-    features: 0.25,
-    vendor: 0.10
-  };
+Cost:
+- <$1 → 5, $1-$5 → 4, $5-$15 → 3, $15-$30 → 2, >$30 → 1
 
-  // Score each dimension (1-5 scale)
-  const scores = {
-    cost: scoreCost(part.unitPrice),
-    availability: scoreAvailability(part.stock, part.leadTimeWeeks),
-    features: scoreFeatures(part.specs, requirements),
-    vendor: scoreVendor(part.manufacturer)
-  };
+Availability (based on stock count and lead time):
+- >1000 units AND ≤2 wk → 5
+- 100-1000 AND ≤4 wk → 4
+- 50-100 AND ≤6 wk → 3
+- 10-50 AND ≤8 wk → 2
+- <10 OR >8 wk → 1
 
-  // Calculate weighted total
-  const totalScore =
-    (scores.cost * weights.cost) +
-    (scores.availability * weights.availability) +
-    (scores.features * weights.features) +
-    (scores.vendor * weights.vendor);
+Features (compare part specs to requirements):
+- Start at 3 (meets requirements baseline)
+- Flash >1.5× required → +0.5, RAM >1.5× required → +0.5, Speed >1.2× required → +0.5
+- Flash < required → -1, RAM < required → -1, Speed < required → -1
+- Floor at 1, ceiling at 5
 
-  return {
-    partNumber: part.mpn,
-    manufacturer: part.manufacturer,
-    totalScore: Math.round(totalScore * 100) / 100, // e.g., 3.85
-    breakdown: scores,
-    recommendation: totalScore >= 3.5 ? 'recommended' : 'acceptable'
-  };
-}
+Vendor reputation:
+- Tier 1 (TI, STMicroelectronics, Analog Devices, Nordic) → 5
+- Tier 2 (Microchip, NXP, Infineon, ON Semiconductor, Renesas) → 4
+- Otherwise (authorized distributor stock) → 3
 
-function scoreCost(unitPrice) {
-  if (unitPrice < 1) return 5;
-  if (unitPrice < 5) return 4;
-  if (unitPrice < 15) return 3;
-  if (unitPrice < 30) return 2;
-  return 1;
-}
+**Weighted total:** `(cost × 0.35) + (availability × 0.30) + (features × 0.25) + (vendor × 0.10)`
 
-function scoreAvailability(stock, leadTimeWeeks) {
-  if (stock > 1000 && leadTimeWeeks <= 2) return 5;
-  if (stock > 100 && leadTimeWeeks <= 4) return 4;
-  if (stock > 50 && leadTimeWeeks <= 6) return 3;
-  if (stock > 10 && leadTimeWeeks <= 8) return 2;
-  return 1;
-}
-
-function scoreVendor(manufacturer) {
-  const tier1 = ['Texas Instruments', 'STMicroelectronics', 'Analog Devices', 'Nordic Semiconductor'];
-  const tier2 = ['Microchip', 'NXP', 'Infineon', 'ON Semiconductor', 'Renesas'];
-
-  if (tier1.includes(manufacturer)) return 5;
-  if (tier2.includes(manufacturer)) return 4;
-  return 3; // Unknown but authorized distributor stock
-}
-
-function scoreFeatures(partSpecs, requirements) {
-  // Compare part specs against requirements
-  // Return 5 if exceeds all, 4 if meets all + some exceed, 3 if meets all, etc.
-  let score = 3; // Base: meets requirements
-
-  // Increment for exceeds
-  if (partSpecs.flash > requirements.flash * 1.5) score += 0.5;
-  if (partSpecs.ram > requirements.ram * 1.5) score += 0.5;
-  if (partSpecs.speed > requirements.speed * 1.2) score += 0.5;
-
-  // Decrement for gaps
-  if (partSpecs.flash < requirements.flash) score -= 1;
-  if (partSpecs.ram < requirements.ram) score -= 1;
-  if (partSpecs.speed < requirements.speed) score -= 1;
-
-  return Math.max(1, Math.min(5, Math.round(score)));
-}
-```
-
-**Selection Process:**
-
-```javascript
-function selectBestPart(candidates, requirements) {
-  // Score all candidates
-  const scored = candidates.map(part => evaluateComponent(part, requirements));
-
-  // Sort by total score descending
-  scored.sort((a, b) => b.totalScore - a.totalScore);
-
-  // Select highest scoring part as primary
-  const primary = scored[0];
-
-  console.log(`Selected: ${primary.partNumber} (${primary.manufacturer})`);
-  console.log(`  Score: ${primary.totalScore}/5.0`);
-  console.log(`  Breakdown: Cost=${primary.breakdown.cost}, Avail=${primary.breakdown.availability}, Features=${primary.breakdown.features}, Vendor=${primary.breakdown.vendor}`);
-
-  return primary;
-}
-```
+Select the highest-scoring candidate as primary. Log: part number, manufacturer, total score (e.g., 3.85/5.0), and breakdown by dimension. Mark as `recommended` if score ≥ 3.5, otherwise `acceptable`.
 
 ### FALLBACK STRATEGY
 
-If DigiKey has no results, fall back to alternate sources:
+If DigiKey has no results, fall back to alternate sources in this priority order:
 
-```javascript
-async function searchComponentWithFallback(category, requirements) {
-  // 1. Try DigiKey first (primary)
-  let candidates = await searchDigiKey(category, requirements);
-
-  if (candidates.length > 0) {
-    console.log(`DigiKey: Found ${candidates.length} candidates for ${category}`);
-    return { source: 'DigiKey', candidates };
-  }
-
-  // 2. Try Mouser (secondary)
-  console.log(`DigiKey: No results for ${category}. Trying Mouser...`);
-  candidates = await searchMouser(category, requirements);
-
-  if (candidates.length > 0) {
-    console.log(`Mouser: Found ${candidates.length} candidates for ${category}`);
-    return { source: 'Mouser', candidates };
-  }
-
-  // 3. Try Arrow/Newark/Avnet (tertiary)
-  console.log(`Mouser: No results for ${category}. Trying Arrow/Newark...`);
-  candidates = await searchArrowNewark(category, requirements);
-
-  if (candidates.length > 0) {
-    console.log(`Arrow/Newark: Found ${candidates.length} candidates for ${category}`);
-    return { source: 'Arrow/Newark', candidates };
-  }
-
-  // 4. Web research (last resort)
-  console.log(`No distributor results for ${category}. Performing web research...`);
-  const webResults = await webSearchComponent(category, requirements);
-
-  if (webResults.length > 0) {
-    return { source: 'WebSearch', candidates: webResults };
-  }
-
-  // 5. Flag if no viable part found
-  console.warn(`WARNING: No viable part found for ${category}`);
-  return {
-    source: 'NONE',
-    candidates: [],
-    flag: `No viable ${category} found. Consider requirement relaxation or manual search.`
-  };
-}
-```
-
-**Distributor Priority (per CONTEXT.md):**
-1. DigiKey (primary - largest parametric database)
-2. Mouser (secondary - major authorized distributor)
-3. Arrow/Newark/Avnet (tertiary - authorized alternatives)
+1. **DigiKey** (primary — largest parametric database)
+2. **Mouser** (secondary — major authorized distributor)
+3. **Arrow/Newark/Avnet** (tertiary — authorized alternatives)
+4. **Web research** (last resort — use WebSearch for discovery only)
+5. **Flag if no viable part found:** `No viable {category} found. Consider requirement relaxation or manual search.`
 
 **NOT ALLOWED:** LCSC, AliExpress, eBay, brokers, or unauthorized sources
 
@@ -4067,77 +2213,29 @@ Verify lifecycle status before selecting any part. Only Active parts are accepta
 | Last Time Buy | Final purchase window | **REJECT** - too late for new design |
 | Obsolete | Discontinued | **REJECT** - no manufacturer stock |
 
-**Verification Sources (all trusted per CONTEXT.md):**
+**Verification Sources (all trusted):**
 1. Manufacturer PCN/PDN notices (product change/discontinuation)
 2. Distributor lifecycle flags (DigiKey/Mouser status field)
 3. Vendor product pages (manufacturer's official site)
 4. Octopart aggregated data (cross-references multiple sources)
 
-**Implementation:**
+**Lifecycle determination:**
+- `active` or `production` → pass, note: `Part is in full production`
+- `introduction` → pass with caution: `New product, limited field data`
+- `nrnd` or `not recommended for new design` → fail: `NRND — REJECT`
+- `last time buy` or `ltb` → fail: `Last Time Buy — REJECT`
+- `obsolete` or `eol` → fail: `Discontinued — REJECT`
+- Unknown → flag as unverified: `Status not confirmed — manual verification recommended`
 
-```javascript
-function verifyLifecycleStatus(partInfo) {
-  const status = partInfo.lifecycleStatus?.toLowerCase() || 'unknown';
+**Conflicting status:** If DigiKey and manufacturer disagree on lifecycle status, flag for user decision: `DigiKey says {status1}, manufacturer says {status2}. Proceed?`
 
-  const statusMap = {
-    'active': { pass: true, note: 'Part is in full production' },
-    'production': { pass: true, note: 'Part is in full production' },
-    'introduction': { pass: true, note: 'New product, limited field data' },
-    'nrnd': { pass: false, note: 'Not Recommended for New Design - REJECT' },
-    'not recommended for new design': { pass: false, note: 'NRND - REJECT' },
-    'last time buy': { pass: false, note: 'Final purchase window - REJECT for new design' },
-    'ltb': { pass: false, note: 'Last Time Buy - REJECT' },
-    'obsolete': { pass: false, note: 'Discontinued - REJECT' },
-    'eol': { pass: false, note: 'End of Life - REJECT' },
-    'unknown': { pass: null, note: 'Status not confirmed - flag for verification' }
-  };
-
-  const result = statusMap[status] || statusMap['unknown'];
-
-  return {
-    status: status,
-    acceptable: result.pass,
-    note: result.note,
-    action: result.pass === false ? 'find_alternative' :
-            result.pass === null ? 'flag_as_unverified' : 'proceed'
-  };
-}
-```
-
-**Handling Conflicting Status:**
-
-When sources disagree, flag for user decision:
-
-```javascript
-function checkConflictingStatus(digikeyStatus, manufacturerStatus) {
-  if (digikeyStatus !== manufacturerStatus) {
-    return {
-      conflict: true,
-      digikeyStatus,
-      manufacturerStatus,
-      message: `DigiKey says ${digikeyStatus}, manufacturer says ${manufacturerStatus}. Proceed?`,
-      action: 'flag_for_user_decision'
-    };
-  }
-
-  return { conflict: false };
-}
-```
-
-**Missing Lifecycle Data:**
-
-If lifecycle status is unavailable, flag as unverified (per CONTEXT.md):
-
-```markdown
-**Lifecycle Status:** Unverified (status not confirmed from distributor or manufacturer)
-**Action:** Proceed with caution, manual verification recommended
-```
+**Missing lifecycle data:** Document as unverified and note: `Proceed with caution, manual verification recommended`
 
 ### HARD-TO-SOURCE THRESHOLD DETECTION
 
 Identify parts that need alternates based on sourcing risk.
 
-**Thresholds (per CONTEXT.md):**
+**Thresholds:**
 
 | Criterion | Threshold | Trigger |
 |-----------|-----------|---------|
@@ -4145,80 +2243,12 @@ Identify parts that need alternates based on sourcing risk.
 | Stock Quantity | <100 units | Requires alternate |
 | Price Spike | >50% vs historical | Requires alternate |
 
-**Implementation:**
+When a part triggers any threshold, find 1-2 alternates:
+- Search DigiKey cross-reference tool for similar parts
+- Filter to: active lifecycle, stock ≥100 units, lead time ≤8 weeks
+- Return top 1-2 viable alternates
 
-```javascript
-function checkHardToSource(part) {
-  const thresholds = {
-    leadTimeWeeks: 8,
-    stockQuantity: 100,
-    priceSpikePct: 50
-  };
-
-  const issues = [];
-
-  // Lead time check
-  if (part.leadTimeWeeks > thresholds.leadTimeWeeks) {
-    issues.push({
-      criterion: 'lead_time',
-      value: part.leadTimeWeeks,
-      threshold: thresholds.leadTimeWeeks,
-      message: `Lead time ${part.leadTimeWeeks} weeks exceeds ${thresholds.leadTimeWeeks} week threshold`
-    });
-  }
-
-  // Stock quantity check
-  if (part.stockQuantity < thresholds.stockQuantity) {
-    issues.push({
-      criterion: 'stock',
-      value: part.stockQuantity,
-      threshold: thresholds.stockQuantity,
-      message: `Stock ${part.stockQuantity} units below ${thresholds.stockQuantity} unit threshold`
-    });
-  }
-
-  // Price spike check (if historical data available)
-  if (part.priceSpikePct && part.priceSpikePct > thresholds.priceSpikePct) {
-    issues.push({
-      criterion: 'price_spike',
-      value: part.priceSpikePct,
-      threshold: thresholds.priceSpikePct,
-      message: `Price spike ${part.priceSpikePct}% exceeds ${thresholds.priceSpikePct}% threshold`
-    });
-  }
-
-  return {
-    isHardToSource: issues.length > 0,
-    issues: issues,
-    action: issues.length > 0 ? 'provide_alternates' : 'proceed'
-  };
-}
-```
-
-**Alternate Selection:**
-
-When part is hard-to-source, provide 1-2 alternates meeting same specs:
-
-```javascript
-async function findAlternates(primaryPart, requirements) {
-  // Use DigiKey Cross Reference tool
-  const alternates = await searchSimilarParts(primaryPart.mpn);
-
-  // Filter to active lifecycle, in-stock parts
-  const viable = alternates.filter(alt =>
-    verifyLifecycleStatus(alt).acceptable &&
-    alt.stockQuantity >= 100 &&
-    alt.leadTimeWeeks <= 8
-  );
-
-  // Return top 1-2 alternates
-  return viable.slice(0, 2);
-}
-```
-
-**Alternate Documentation Format:**
-
-Document alternates inline with primary part:
+**Document alternates inline with primary part:**
 
 ```markdown
 **Primary:** TPS54331 (Texas Instruments) - $2.15, 1500 in stock
@@ -4251,32 +2281,18 @@ Use generic specifications for resistors, capacitors, and basic connectors inste
 - Power inductors (saturation current critical)
 - Application-specific connectors
 
-**Implementation:**
-
-```javascript
-function formatCommodityPart(component) {
-  switch (component.type) {
-    case 'resistor':
-      return `${component.value} ${component.package} ${component.tolerance}`;
-    case 'capacitor':
-      return `${component.value} ${component.package} ${component.voltage} ${component.dielectric}`;
-    case 'inductor':
-      return `${component.value} ${component.package} ${component.current}A`;
-    case 'led':
-      return `${component.color} ${component.package} ${component.vf}V`;
-    case 'connector':
-      return `${component.type} ${component.pitch}mm ${component.pins}P`;
-    default:
-      return component.description;
-  }
-}
-```
+Format commodity parts by type:
+- resistor → `{value} {package} {tolerance}`
+- capacitor → `{value} {package} {voltage} {dielectric}`
+- inductor → `{value} {package} {current}A`
+- led → `{color} {package} {vf}V`
+- connector → `{type} {pitch}mm {pins}P`
 
 ### BOM DOCUMENTATION FORMAT
 
 Standard fields and format for Bill of Materials documentation.
 
-**Required Fields (per CONTEXT.md):**
+**Required Fields:**
 1. Part number and manufacturer
 2. Key specifications
 3. Availability and pricing
@@ -4304,76 +2320,15 @@ Standard fields and format for Bill of Materials documentation.
 - **Manufacturer:** Who makes it (or "-" for generic)
 - **Description:** Key specs in brief
 - **Qty:** Quantity per unit
-- **Unit Price:** 1-10 qty pricing from DigiKey/Mouser
+- **Unit Price:** 1-10 qty pricing from DigiKey/Mouser (prefix `est.` if from web search)
 - **Stock:** Quantity in stock (or "-" for generic)
 - **Lead Time:** Factory lead time if not in stock (or "-" for generic)
 - **Datasheet:** URL to official datasheet (or "-" for generic)
 
-**BOM Entry Generation:**
-
-```javascript
-function generateBOMEntry(part, refDes, quantity, isCommodity = false) {
-  if (isCommodity) {
-    // Generic specification for commodity parts
-    return {
-      ref: refDes,
-      category: part.category,
-      mpn: 'Generic',
-      manufacturer: '-',
-      description: part.genericSpec, // e.g., "10k 0603 1%"
-      qty: quantity,
-      unitPrice: part.estimatedPrice || '$0.01',
-      stock: '-',
-      leadTime: '-',
-      datasheet: '-'
-    };
-  }
-
-  // Full specification for active parts
-  return {
-    ref: refDes,
-    category: part.category,
-    mpn: part.mpn,
-    manufacturer: part.manufacturer,
-    description: part.description,
-    qty: quantity,
-    unitPrice: `$${part.unitPrice.toFixed(2)}`,
-    stock: part.stockQuantity,
-    leadTime: part.leadTimeWeeks ? `${part.leadTimeWeeks} wk` : 'In Stock',
-    datasheet: part.datasheetUrl ? `[Link](${part.datasheetUrl})` : '-'
-  };
-}
-```
-
-**BOM Table Formatting:**
-
-```javascript
-function formatBOMTable(entries) {
-  let markdown = '| Ref | Category | MPN | Manufacturer | Description | Qty | Unit Price | Stock | Lead Time | Datasheet |\n';
-  markdown += '|-----|----------|-----|--------------|-------------|-----|------------|-------|-----------|----------|\n';
-
-  entries.forEach(entry => {
-    markdown += `| ${entry.ref} | ${entry.category} | ${entry.mpn} | ${entry.manufacturer} | ${entry.description} | ${entry.qty} | ${entry.unitPrice} | ${entry.stock} | ${entry.leadTime} | ${entry.datasheet} |\n`;
-  });
-
-  return markdown;
-}
-```
-
-**Total BOM Cost Calculation:**
-
-```javascript
-function calculateTotalBOMCost(entries) {
-  const total = entries
-    .filter(e => e.unitPrice !== '-')
-    .reduce((sum, entry) => {
-      const price = parseFloat(entry.unitPrice.replace('$', ''));
-      return sum + (price * entry.qty);
-    }, 0);
-
-  return `$${total.toFixed(2)}`;
-}
-```
+BOM entry rules:
+- Commodity parts: MPN = "Generic", Manufacturer = "-", Stock = "-", Lead Time = "-", Datasheet = "-"
+- Active parts: use live API data (if API_MODE=true) or web estimate prefixed with `est.`
+- Total BOM Cost = sum of (unit_price × qty) for all entries with numeric prices
 
 ### OUTPUT FILES
 
@@ -4450,86 +2405,299 @@ Create `.librespin/04-bom/bom-{concept-name}.md`:
 
 ### ERROR HANDLING
 
-**No validated concepts:**
-```javascript
-if (validatedConcepts.length === 0) {
-  console.error(`ERROR: No validated concepts found (>=${threshold}% confidence).`);
-  console.error(`Run Phase 1 first, or lower confidence_threshold in librespin-concept-config.yaml.`);
-  process.exit(1);
-}
-```
+**No validated concepts:** Stop with: `ERROR: No validated concepts found (>={threshold}% confidence). Run Phase 1 first, or lower confidence_threshold in librespin-concept-config.yaml.`
 
-**Part not found:**
-```javascript
-if (searchResult.source === 'NONE') {
-  console.warn(`WARNING: No viable part found for ${category}`);
-  console.warn(`Flagging uncertainty. Consider:`);
-  console.warn(`  1. Relaxing requirements for this component`);
-  console.warn(`  2. Manual search on manufacturer websites`);
-  console.warn(`  3. Consulting with design engineer`);
+**Part not found:** Warn: `WARNING: No viable part found for {category}. Flagging uncertainty. Consider: 1) Relaxing requirements, 2) Manual search on manufacturer websites, 3) Consulting with design engineer.` Add note to BOM entry: `UNVERIFIED: No viable part found, manual search required`
 
-  // Flag in BOM output
-  bomEntry.note = 'UNVERIFIED: No viable part found, manual search required';
-}
-```
-
-**All parts NRND/obsolete for category:**
-```javascript
-if (candidates.every(c => !verifyLifecycleStatus(c).acceptable)) {
-  console.error(`CRITICAL: All ${candidates.length} candidates for ${category} are NRND or obsolete.`);
-  console.error(`No active parts meet requirements. Consider:`);
-  console.error(`  1. Relaxing requirements (different package, lower specs)`);
-  console.error(`  2. Alternative architecture approach`);
-  console.error(`  3. Custom design or module substitution`);
-
-  // Flag critical issue in output
-  return {
-    critical: true,
-    message: `No active parts available for ${category}`,
-    suggestion: 'Requirement relaxation needed'
-  };
-}
-```
+**All parts NRND/obsolete for category:** Stop with: `CRITICAL: All {N} candidates for {category} are NRND or obsolete. No active parts meet requirements. Consider: 1) Relaxing requirements (different package, lower specs), 2) Alternative architecture approach, 3) Custom design or module substitution.`
 
 ### COMPLETION SUMMARY
 
-After all concepts processed:
+After all concepts processed, report:
+- Count of validated concepts processed
+- List of BOM files created: `.librespin/04-bom/bom-{concept-slug}.md` for each
+- Estimated BOM cost per concept
+- Count of hard-to-source parts flagged (with alternates provided)
+- Count of parts with unverified lifecycle status
+- Next step: `Run Phase 1 (Concept Generation) to finalize concept documentation.`
 
-```javascript
-console.log(`\nPhase 4 (Component Research) complete.`);
-console.log(`Processed: ${validatedConcepts.length} validated concepts`);
-console.log(`\nBOM files created:`);
-validatedConcepts.forEach(concept => {
-  const conceptSlug = concept.name.toLowerCase().replace(/\s+/g, '-');
-  const bomPath = `.librespin/04-bom/bom-${conceptSlug}.md`;
-  console.log(`  - ${bomPath}`);
-});
+**Update state file** `.librespin/state.md` — replace the `phase:` line value with `'4-component-research'`.
 
-// Report total costs
-console.log(`\nEstimated BOM costs:`);
-validatedConcepts.forEach(concept => {
-  console.log(`  - ${concept.name}: ${concept.bomCost}`);
-});
+### DISTRIBUTOR ENRICHMENT (Phase 4 — additive, after MPN selection)
 
-// Report any issues
-if (hardToSourceParts.length > 0) {
-  console.log(`\n${hardToSourceParts.length} hard-to-source parts flagged (alternates provided)`);
+After BOM files are written to `.librespin/04-bom/`, enrich each selected component with real-time inventory and pricing from configured distributor APIs.
+
+**Trigger condition:** Only runs if `~/.librespin/credentials` exists. If absent, skip enrichment silently and continue. This preserves existing Phase 4 behavior for users without API keys.
+
+**Enrichment execution:**
+
+```bash
+# --- Distributor Enrichment Block ---
+CREDS_FILE="$HOME/.librespin/credentials"
+
+if [ ! -f "$CREDS_FILE" ]; then
+  echo "[Distributor Enrichment] No credentials file found — skipping (run /librespin:setup to configure)"
+  exit 0
+fi
+
+# Check jq availability
+if ! command -v jq > /dev/null 2>&1; then
+  echo "[Distributor Enrichment] WARNING: jq not found. Install: sudo apt install jq"
+  echo "[Distributor Enrichment] Skipping enrichment — jq required for API response parsing"
+  exit 0
+fi
+
+# Helper functions
+read_credential() {
+  local section="$1" key="$2"
+  grep -A50 "^\[$section\]" "$CREDS_FILE" | grep -m1 "^$key" | awk -F' = ' '{print $2}' | tr -d '\r\n'
 }
 
-if (unverifiedParts.length > 0) {
-  console.log(`\n${unverifiedParts.length} parts have unverified lifecycle status`);
+write_credential() {
+  local section="$1" key="$2" value="$3"
+  sed -i "/^\[$section\]/,/^\[/{s|^$key = .*|$key = $value|}" "$CREDS_FILE"
 }
 
-console.log(`\nNext: Run Phase 1 (Concept Generation) to finalize concept documentation.`);
+is_token_expired() {
+  local expires="$1"
+  [ -z "$expires" ] && return 0  # empty expiry = treat as expired
+  local now
+  now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  [[ "$now" > "$expires" ]]
+}
+
+# Enrichment result accumulator
+# For each component MPN passed by Phase 4 logic, run this block:
+# MPN variable: $COMPONENT_MPN (set by calling context per component)
+enrich_component() {
+  local MPN="$1"
+  local enrichment="## Distributor Enrichment: $MPN\n"
+  enrichment+="| Supplier | Stock | Unit Price (USD) | Lifecycle | MOQ |\n"
+  enrichment+="| --- | --- | --- | --- | --- |\n"
+  local any_result=false
+
+  # --- Nexar ---
+  local NEXAR_CLIENT_ID NEXAR_CLIENT_SECRET NEXAR_TOKEN NEXAR_EXPIRY NEXAR_PARTS_USED
+  NEXAR_CLIENT_ID=$(read_credential nexar client_id)
+  NEXAR_CLIENT_SECRET=$(read_credential nexar client_secret)
+  NEXAR_TOKEN=$(read_credential nexar access_token)
+  NEXAR_EXPIRY=$(read_credential nexar token_expires)
+  NEXAR_PARTS_USED=$(read_credential nexar parts_used)
+  NEXAR_PARTS_USED=${NEXAR_PARTS_USED:-0}
+
+  if [ -n "$NEXAR_CLIENT_ID" ] && [ -n "$NEXAR_CLIENT_SECRET" ]; then
+    # Check free tier quota (100 parts/month)
+    if [ "$NEXAR_PARTS_USED" -ge 100 ] 2>/dev/null; then
+      echo "[Nexar] Free tier exhausted (100/100 parts used). Upgrade at nexar.com or configure another supplier."
+      enrichment+="| Nexar | Quota exhausted (100/100) | — | — | — |\n"
+    else
+      # Refresh token if expired
+      if is_token_expired "$NEXAR_EXPIRY"; then
+        echo "[Nexar] Token expired — refreshing..."
+        local NR
+        NR=$(curl -s --request POST 'https://identity.nexar.com/connect/token' \
+          --header 'Content-Type: application/x-www-form-urlencoded' \
+          --data-urlencode 'grant_type=client_credentials' \
+          --data-urlencode "client_id=$NEXAR_CLIENT_ID" \
+          --data-urlencode "client_secret=$NEXAR_CLIENT_SECRET" \
+          --data-urlencode 'scope=supply.domain')
+        NEXAR_TOKEN=$(echo "$NR" | jq -r '.access_token // empty')
+        if [ -n "$NEXAR_TOKEN" ]; then
+          NEXAR_EXPIRY=$(date -u -d "+23 hours" +%Y-%m-%dT%H:%M:%SZ)
+          write_credential nexar access_token "$NEXAR_TOKEN"
+          write_credential nexar token_expires "$NEXAR_EXPIRY"
+        else
+          echo "[Nexar] Token refresh failed — skipping"
+        fi
+      fi
+
+      if [ -n "$NEXAR_TOKEN" ]; then
+        local NEXAR_RESULT
+        NEXAR_RESULT=$(curl -s -X POST 'https://api.nexar.com/graphql/' \
+          -H "Authorization: Bearer $NEXAR_TOKEN" \
+          -H 'Content-Type: application/json' \
+          -d "{\"query\": \"query { supSearchMpn(q: \\\"$MPN\\\", limit: 1) { results { part { mpn manufacturer { name } specs(attribute: \\\"lifecyclestatus\\\") { displayValue } sellers(authorizedOnly: true) { company { name } offers { inventoryLevel moq prices { quantity price currency } } } } } } }\"}")
+        if echo "$NEXAR_RESULT" | jq -e '.errors' > /dev/null 2>&1; then
+          echo "[Nexar] API error for $MPN — skipping"
+        else
+          local NX_STOCK NX_PRICE NX_LIFECYCLE NX_MOQ
+          NX_STOCK=$(echo "$NEXAR_RESULT" | jq -r '.data.supSearchMpn.results[0].part.sellers[0].offers[0].inventoryLevel // "unknown"')
+          NX_PRICE=$(echo "$NEXAR_RESULT" | jq -r '.data.supSearchMpn.results[0].part.sellers[0].offers[0].prices[0].price // "unknown"')
+          NX_LIFECYCLE=$(echo "$NEXAR_RESULT" | jq -r '.data.supSearchMpn.results[0].part.specs[0].displayValue // "unknown"')
+          NX_MOQ=$(echo "$NEXAR_RESULT" | jq -r '.data.supSearchMpn.results[0].part.sellers[0].offers[0].moq // "unknown"')
+          enrichment+="| Nexar | $NX_STOCK | $NX_PRICE | $NX_LIFECYCLE | $NX_MOQ |\n"
+          any_result=true
+          NEXAR_PARTS_USED=$((NEXAR_PARTS_USED + 1))
+          write_credential nexar parts_used "$NEXAR_PARTS_USED"
+          if [ "$NEXAR_PARTS_USED" -ge 80 ] && [ "$NEXAR_PARTS_USED" -lt 100 ]; then
+            echo "[Nexar] WARNING: Free tier usage: $NEXAR_PARTS_USED/100 parts. Approaching limit."
+          fi
+        fi
+      fi
+    fi
+  fi
+
+  # --- DigiKey ---
+  local DK_CLIENT_ID DK_CLIENT_SECRET DK_TOKEN DK_EXPIRY
+  DK_CLIENT_ID=$(read_credential digikey client_id)
+  DK_CLIENT_SECRET=$(read_credential digikey client_secret)
+  DK_TOKEN=$(read_credential digikey access_token)
+  DK_EXPIRY=$(read_credential digikey token_expires)
+
+  if [ -n "$DK_CLIENT_ID" ] && [ -n "$DK_CLIENT_SECRET" ]; then
+    # DigiKey token expires in 10 minutes — always check before use
+    if is_token_expired "$DK_EXPIRY"; then
+      echo "[DigiKey] Token expired — refreshing..."
+      local DKR
+      DKR=$(curl -s -X POST 'https://api.digikey.com/v1/oauth2/token' \
+        -H 'Content-Type: application/x-www-form-urlencoded' \
+        -d "client_id=$DK_CLIENT_ID&client_secret=$DK_CLIENT_SECRET&grant_type=client_credentials")
+      DK_TOKEN=$(echo "$DKR" | jq -r '.access_token // empty')
+      if [ -n "$DK_TOKEN" ]; then
+        local DK_NEW_EXPIRY
+        DK_NEW_EXPIRY=$(date -u -d "+9 minutes" +%Y-%m-%dT%H:%M:%SZ)
+        write_credential digikey access_token "$DK_TOKEN"
+        write_credential digikey token_expires "$DK_NEW_EXPIRY"
+      else
+        echo "[DigiKey] Token refresh failed — skipping"
+      fi
+    fi
+
+    if [ -n "$DK_TOKEN" ]; then
+      local DK_RESULT DK_STOCK DK_PRICE DK_LIFECYCLE DK_COUNT
+      # CRITICAL: POST keyword search (V4). Both Authorization AND X-DIGIKEY-Client-Id required.
+      DK_RESULT=$(curl -s -X POST "https://api.digikey.com/products/v4/search/keyword" \
+        -H "Authorization: Bearer $DK_TOKEN" \
+        -H "X-DIGIKEY-Client-Id: $DK_CLIENT_ID" \
+        -H "X-DIGIKEY-Locale-Site: US" \
+        -H "X-DIGIKEY-Locale-Language: en" \
+        -H "X-DIGIKEY-Locale-Currency: USD" \
+        -H "Content-Type: application/json" \
+        -d "{\"Keywords\": \"$MPN\", \"Limit\": 1}")
+      DK_STOCK=$(echo "$DK_RESULT" | jq -r '.Products[0].QuantityAvailable // "unknown"')
+      DK_PRICE=$(echo "$DK_RESULT" | jq -r '.Products[0].UnitPrice // "unknown"')
+      DK_LIFECYCLE=$(echo "$DK_RESULT" | jq -r '.Products[0].ProductStatus.Status // "unknown"')
+      DK_COUNT=$(echo "$DK_RESULT" | jq -r '.Products | length' 2>/dev/null || echo "0")
+      if [ "${DK_COUNT:-0}" -eq 0 ] || [ "$DK_STOCK" = "null" ]; then
+        echo "[DigiKey] No result for $MPN — logging and continuing"
+        enrichment+="| DigiKey | Not found | — | — | — |\n"
+      else
+        enrichment+="| DigiKey | $DK_STOCK | \$$DK_PRICE | $DK_LIFECYCLE | — |\n"
+        any_result=true
+      fi
+    fi
+  fi
+
+  # --- Mouser ---
+  local MOUSER_KEY
+  MOUSER_KEY=$(read_credential mouser part_api_key)
+  if [ -n "$MOUSER_KEY" ]; then
+    local MOUSER_RESULT MOUSER_STOCK MOUSER_PRICE
+    MOUSER_RESULT=$(curl -s -X POST "https://api.mouser.com/api/v1/search/partnumber?apiKey=$MOUSER_KEY" \
+      -H 'Content-Type: application/json' \
+      -d "{\"SearchByPartRequest\": {\"mouserPartNumber\": \"$MPN\", \"partSearchOptions\": \"\"}}")
+    MOUSER_STOCK=$(echo "$MOUSER_RESULT" | jq -r '.SearchResults.Parts[0].Availability // "unknown"')
+    MOUSER_PRICE=$(echo "$MOUSER_RESULT" | jq -r '.SearchResults.Parts[0].PriceBreaks[0].Price // "unknown"')
+    if [ "$MOUSER_STOCK" = "null" ] || [ -z "$MOUSER_STOCK" ]; then
+      echo "[Mouser] No result for $MPN — logging and continuing"
+    else
+      enrichment+="| Mouser | $MOUSER_STOCK | $MOUSER_PRICE | — | — |\n"
+      any_result=true
+    fi
+  fi
+
+  # --- Arrow ---
+  local ARROW_LOGIN ARROW_KEY
+  ARROW_LOGIN=$(read_credential arrow login)
+  ARROW_KEY=$(read_credential arrow api_key)
+  if [ -n "$ARROW_LOGIN" ] && [ -n "$ARROW_KEY" ]; then
+    local ARROW_RESULT ARROW_STOCK
+    ARROW_RESULT=$(curl -s "https://api.arrow.com/itemservice/v4/en/search?term=$MPN&login=$ARROW_LOGIN&apikey=$ARROW_KEY")
+    ARROW_STOCK=$(echo "$ARROW_RESULT" | jq -r '.itemserviceresult.data[0].InvOrg.sources[0].Quantity // "unknown"' 2>/dev/null || echo "unknown")
+    if [ "$ARROW_STOCK" = "unknown" ] || [ "$ARROW_STOCK" = "null" ]; then
+      echo "[Arrow] No result or error for $MPN — logging and continuing"
+    else
+      enrichment+="| Arrow | $ARROW_STOCK | — | — | — |\n"
+      any_result=true
+    fi
+  fi
+
+  # --- Newark/Farnell ---
+  local NEWARK_KEY NEWARK_STOREFRONT
+  NEWARK_KEY=$(read_credential newark api_key)
+  NEWARK_STOREFRONT=$(read_credential newark storefront)
+  NEWARK_STOREFRONT=${NEWARK_STOREFRONT:-us.newark.com}
+  if [ -n "$NEWARK_KEY" ]; then
+    local NEWARK_RESULT NEWARK_STOCK
+    NEWARK_RESULT=$(curl -s \
+      "https://api.element14.com/catalog/sandboxed/products;keywordList=$MPN;storeInfo.id=$NEWARK_STOREFRONT/v1/xml-data/productDetails/manufacturer?apikey=$NEWARK_KEY" \
+      -H 'Accept: application/json')
+    NEWARK_STOCK=$(echo "$NEWARK_RESULT" | jq -r '.manufacturerProductDetailResponse.products.product[0].inv // "unknown"' 2>/dev/null || echo "unknown")
+    if [ "$NEWARK_STOCK" = "null" ] || [ "$NEWARK_STOCK" = "unknown" ]; then
+      echo "[Newark] No result for $MPN — logging and continuing"
+    else
+      enrichment+="| Newark/Farnell | $NEWARK_STOCK | — | — | — |\n"
+      any_result=true
+    fi
+  fi
+
+  # --- LCSC ---
+  local LCSC_KEY LCSC_PUBLIC
+  LCSC_KEY=$(read_credential lcsc api_key)
+  LCSC_PUBLIC=$(read_credential lcsc use_public_endpoint)
+  if [ -n "$LCSC_KEY" ]; then
+    local LCSC_RESULT LCSC_STOCK
+    LCSC_RESULT=$(curl -s -H "Authorization: $LCSC_KEY" "https://lcsc.com/api/search?q=$MPN")
+    LCSC_STOCK=$(echo "$LCSC_RESULT" | jq -r '.data.productList[0].stockCount // "unknown"' 2>/dev/null || echo "unknown")
+    if [ "$LCSC_STOCK" = "null" ] || [ "$LCSC_STOCK" = "unknown" ]; then
+      echo "[LCSC] Official API: no result for $MPN"
+    else
+      enrichment+="| LCSC | $LCSC_STOCK | — | — | — |\n"
+      any_result=true
+    fi
+  elif [ "$LCSC_PUBLIC" = "true" ]; then
+    # Public wmsc endpoint — note: unofficial, may change without notice
+    local LCSC_PUB_RESULT LCSC_PUB_STOCK
+    LCSC_PUB_RESULT=$(curl -s "https://wmsc.lcsc.com/wmsc/search/global?keyword=$MPN&currentPage=1&pageSize=5")
+    LCSC_PUB_STOCK=$(echo "$LCSC_PUB_RESULT" | jq -r '.result.data[0].stockCount // "unknown"' 2>/dev/null || echo "unknown")
+    if [ "$LCSC_PUB_STOCK" = "null" ] || [ "$LCSC_PUB_STOCK" = "unknown" ]; then
+      echo "[LCSC] Public endpoint: no result for $MPN"
+    else
+      enrichment+="| LCSC (public) | $LCSC_PUB_STOCK | — | — | — |\n"
+      any_result=true
+    fi
+  fi
+
+  # Output enrichment if any supplier returned data
+  if $any_result; then
+    echo -e "$enrichment"
+  else
+    echo "[Distributor Enrichment] No supplier data for $MPN — check credentials or try /librespin:setup"
+  fi
+}
 ```
 
-**Update state file** `.librespin/state.md` — set `phase` to `4-component-research`:
+**Integration with Phase 4 research loop (DURING selection, not after):**
 
-```javascript
-const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
-const updatedState = existingState.replace(/^phase: .+$/m, `phase: '4-component-research'`);
-fs.writeFileSync('.librespin/state.md', updatedState);
+For each component being researched — call `enrich_component "$MPN"` BEFORE writing the BOM entry. Use the returned data as the primary source in the balanced scorecard:
+
 ```
+For each component in research loop:
+  1. Identify candidate MPNs (web search for discovery is fine here)
+  2. For each candidate MPN:
+     a. If API_MODE=true: call enrich_component "$MPN" — use returned stock/price/lifecycle
+     b. If API_MODE=false: use web estimate, prefix price with "est." in BOM
+  3. Score candidates using balanced scorecard WITH live API data (if available)
+  4. Write BOM entry — API data takes precedence over any web-sourced estimate
+  5. Continue regardless of enrichment success/failure
+```
+
+**Do NOT wait until after all BOM files are written.** Enrichment data must be available during scoring so the best-stocked, correctly-priced part wins.
+
+**Fallback behavior:** If credentials file does not exist or `API_MODE=false`, enrichment is skipped and web estimates are used with `est.` prefix. No errors are raised.
+
+**Output contract preservation:** Enrichment data is appended to `.librespin/04-bom/` files only. The output contract for downstream phases (CalcPad reads `.librespin/07-final-output/`, NGSpice reads `.librespin/08-calculations/`) is unaffected.
+
 
 ## PHASE 5: CONCEPT GENERATION
 
@@ -4552,10 +2720,9 @@ Note: Cross-concept comparison is generated in Phase 1 (comparison-matrix.md) wh
 
 Load confidence threshold from librespin-concept-config.yaml:
 
-```javascript
-const config = yaml.load(fs.readFileSync('.librespin/config.yaml', 'utf8'));
-const confidenceThreshold = config.confidence_threshold || 80;
-```
+- Read `.librespin/config.yaml` and extract `confidence_threshold` field.
+- Default to `80` if field is absent.
+- Store as `confidenceThreshold` for use throughout this phase.
 
 ### INPUT LOADING
 
@@ -4563,76 +2730,17 @@ const confidenceThreshold = config.confidence_threshold || 80;
 
 Read `.librespin/03-validation/validation-summary.md` to identify which concepts passed validation (confidence ≥ threshold or user-approved).
 
-```javascript
-// Extract validated concepts from Phase 1 validation-summary.md
-// Parse the "Validated Concepts" section to get concept names
-const validationSummaryPath = '.librespin/03-validation/validation-summary.md';
-const validationSummary = fs.readFileSync(validationSummaryPath, 'utf-8');
-
-// Extract concept names from validated concepts table (status: passed or approved)
-const validatedConcepts = [];  // Array of concept name strings
-const conceptTableMatch = validationSummary.match(/## Validated Concepts[\s\S]*?\n\n/);
-if (conceptTableMatch) {
-  const lines = conceptTableMatch[0].split('\n').filter(l => l.startsWith('|') && !l.includes('---'));
-  for (const line of lines.slice(1)) {  // Skip header
-    const cols = line.split('|').map(c => c.trim()).filter(c => c);
-    if (cols.length >= 2 && (cols[1] === 'passed' || cols[1] === 'approved')) {
-      validatedConcepts.push(cols[0]);  // Concept name
-    }
-  }
-}
-
-// For each validated concept, check if BOM exists (using slugified name)
-for (const conceptName of validatedConcepts) {
-  const conceptSlug = conceptName.toLowerCase().replace(/\s+/g, '-');
-  const bomPath = `.librespin/04-bom/bom-${conceptSlug}.md`;
-  if (!fs.existsSync(bomPath)) {
-    console.error(`ERROR: Missing BOM file for concept "${conceptName}": ${bomPath}`);
-    console.error('Run Phase 2 (Component Research) first.');
-    process.exit(1);
-  }
-}
-```
+- Read `.librespin/03-validation/validation-summary.md` and locate the "## Validated Concepts" table.
+- Extract concept names where status is `passed` or `approved`.
+- For each validated concept, slugify the name (lowercase, spaces to hyphens) and verify `.librespin/04-bom/bom-{slug}.md` exists.
+- If any BOM file is missing: STOP with error "Missing BOM file for concept '{name}'. Run Phase 2 (Component Research) first."
 
 **2. Load requirements from Phase 1:**
 
-```javascript
-const requirementsPath = '.librespin/01-requirements/requirements.yaml';
-if (!fs.existsSync(requirementsPath)) {
-  console.error('ERROR: Requirements file not found:', requirementsPath);
-  console.error('Run Phase 1 (Requirements Gathering) first.');
-  process.exit(1);
-}
-
-const requirements = yaml.load(fs.readFileSync(requirementsPath, 'utf8'), {
-  schema: yaml.FAILSAFE_SCHEMA
-});
-
-// Extract requirements with priority categorization
-const reqsList = [];
-for (const [category, items] of Object.entries(requirements)) {
-  if (category === 'schema_version' || category === 'success_criteria') continue;
-
-  // Determine priority based on category name or metadata
-  let priority = 'Important';  // Default
-  if (category.toLowerCase().includes('critical') || category === 'application') {
-    priority = 'Critical';
-  } else if (category.toLowerCase().includes('nice') || category === 'compliance') {
-    priority = 'Nice-to-have';
-  }
-
-  for (const [reqId, reqText] of Object.entries(items)) {
-    reqsList.push({
-      id: reqId,
-      description: reqText,
-      priority: priority,
-      category: category
-    });
-  }
-}
-
-console.log(`Loaded ${reqsList.length} requirements from Phase 1`);
-```
+- If `.librespin/01-requirements/requirements.yaml` does not exist: STOP with error "Requirements file not found. Run Phase 1 (Requirements Gathering) first."
+- Parse the YAML file; skip keys `schema_version` and `success_criteria`.
+- Assign priority to each category: categories containing "critical" or named "application" → `Critical`; containing "nice" or named "compliance" → `Nice-to-have`; all others → `Important` (default).
+- Flatten all requirements into a list with fields: `id`, `description`, `priority`, `category`.
 
 ### BLOCK DIAGRAM GENERATION
 
@@ -4649,144 +2757,21 @@ For each validated concept, generate component-level ASCII block diagram.
 
 **Implementation:**
 
-```javascript
-function generateBlockDiagram(conceptName, bomPath) {
-  // 1. Parse BOM to extract components
-  const bomContent = fs.readFileSync(bomPath, 'utf8');
-  const components = parseBomComponents(bomContent);
-
-  if (components.length === 0) {
-    console.warn(`WARNING: Empty BOM for concept "${conceptName}". Generating minimal diagram.`);
-    return generateMinimalDiagram(conceptName);
-  }
-
-  if (components.length > 20) {
-    console.warn(`WARNING: Concept "${conceptName}" has ${components.length} components.`);
-    console.warn('Consider splitting into subsystem diagrams for clarity.');
-  }
-
-  // 2. Group components by function
-  const groups = {
-    power: components.filter(c => c.category.toLowerCase().includes('power')),
-    processing: components.filter(c => c.category.toLowerCase().includes('mcu') ||
-                                       c.category.toLowerCase().includes('processor')),
-    communication: components.filter(c => c.category.toLowerCase().includes('wireless') ||
-                                          c.category.toLowerCase().includes('comms')),
-    sensors: components.filter(c => c.category.toLowerCase().includes('sensor')),
-    io: components.filter(c => c.category.toLowerCase().includes('interface') ||
-                               c.category.toLowerCase().includes('display')),
-    passives: components.filter(c => c.category.toLowerCase().includes('passive'))
-  };
-
-  // 3. Generate ASCII diagram following conventions
-  let diagram = `Block Diagram: ${conceptName}\n`;
-  diagram += '='.repeat(50) + '\n\n';
-
-  // Power section (top)
-  if (groups.power.length > 0) {
-    diagram += generatePowerSection(groups.power);
-  }
-
-  // Processing and communication (middle)
-  diagram += generateProcessingSection(groups.processing, groups.communication, groups.sensors, groups.io);
-
-  // Legend
-  diagram += '\n\nLegend:\n';
-  diagram += '  -----> : Signal flow (unidirectional)\n';
-  diagram += '  <----> : Bidirectional data\n';
-  diagram += '  (3.3V) : Power rail annotation\n';
-
-  return diagram;
-}
-
-function parseBomComponents(bomContent) {
-  const components = [];
-  const lines = bomContent.split('\n');
-  let inTable = false;
-
-  for (const line of lines) {
-    if (line.startsWith('|') && line.includes('Category')) {
-      inTable = true;
-      continue;
-    }
-    if (inTable && line.startsWith('|---')) continue;
-    if (inTable && line.startsWith('|')) {
-      const parts = line.split('|').map(p => p.trim()).filter(p => p);
-      if (parts.length >= 4) {
-        components.push({
-          category: parts[0],
-          mpn: parts[1],
-          manufacturer: parts[2],
-          description: parts[3]
-        });
-      }
-    }
-  }
-
-  return components;
-}
-
-function generatePowerSection(powerComponents) {
-  if (powerComponents.length === 0) return '';
-
-  let section = '+---------------+\n';
-  section += '|   Power Input |\n';
-  section += '|   (USB/Batt)  |\n';
-  section += '+-------+-------+\n';
-  section += '        |\n';
-  section += '        v 5V/Batt\n';
-
-  for (const comp of powerComponents) {
-    const abbrev = abbreviateMPN(comp.mpn);
-    section += `+-------+-------+\n`;
-    section += `|   ${abbrev.padEnd(11)} |-----(3.3V)----+\n`;
-    section += `| ${comp.category.substring(0, 11).padEnd(11)} |               |\n`;
-    section += `+---------------+               |\n`;
-    section += '                                v\n';
-  }
-
-  return section;
-}
-
-function abbreviateMPN(mpn) {
-  // Extract key identifier from MPN
-  // E.g., "STM32L476RGT6" -> "STM32L4"
-  //       "nRF52832-QFAA" -> "nRF52832"
-  //       "TPS563200DDCR" -> "TPS563200"
-
-  if (mpn.startsWith('STM32')) {
-    return mpn.substring(0, 7);  // "STM32L4"
-  }
-  if (mpn.startsWith('nRF')) {
-    const match = mpn.match(/nRF\d+/);
-    return match ? match[0] : mpn.substring(0, 10);
-  }
-  if (mpn.length > 12) {
-    return mpn.substring(0, 10);
-  }
-  return mpn;
-}
-```
+- Parse the BOM table from the BOM file (rows under the `Category` header column).
+- If BOM is empty: generate a minimal diagram showing only the concept name box.
+- If BOM has >20 components: warn "Consider splitting into subsystem diagrams for clarity."
+- Group components by category: `power` (contains "power"), `processing` (contains "mcu" or "processor"), `communication` (contains "wireless" or "comms"), `sensors` (contains "sensor"), `io` (contains "interface" or "display"), `passives` (contains "passive").
+- Draw power section at the top (power input → regulator boxes with voltage rail annotations).
+- Draw processing, communication, sensors, and I/O in the middle following left-to-right signal flow.
+- Abbreviate MPN labels: STM32* → first 7 chars; nRF* → `nRF\d+` match; >12 chars → first 10 chars; otherwise as-is.
+- Append a legend: `----->` = signal flow, `<---->` = bidirectional, `(3.3V)` = power rail.
+- Target 20–40 diagram lines; split into subsections if larger.
 
 **Component Summary Table:**
 
 After each diagram, include table linking diagram blocks to BOM references:
 
-```javascript
-function generateComponentSummary(components) {
-  let table = '\n## Component Summary\n\n';
-  table += '| Ref | Component | MPN | Function |\n';
-  table += '|-----|-----------|-----|----------|\n';
-
-  components.forEach((comp, idx) => {
-    const ref = `U${idx + 1}`;  // Simple sequential reference designators
-    const abbrev = abbreviateMPN(comp.mpn);
-    table += `| ${ref} | ${comp.category} | ${abbrev} | ${comp.description} |\n`;
-  });
-
-  return table;
-}
-```
+After the diagram, generate a component summary table with columns: `Ref | Component | MPN | Function`. Assign sequential reference designators (`U1`, `U2`, …). Use abbreviated MPN labels matching the diagram boxes.
 
 **Error Handling:**
 - Missing BOM file: Report error, skip concept (checked in INPUT LOADING)
@@ -4799,93 +2784,18 @@ For each validated concept, create requirements traceability matrix mapping requ
 
 **Traceability Matrix Structure (from 07-RESEARCH.md Pattern 2):**
 
-```javascript
-function generateTraceabilityMatrix(conceptName, requirements, components) {
-  let matrix = '\n## Specification Gap Analysis\n\n';
-  matrix += '| Req ID | Requirement | Priority | Addressed By | Status | Score |\n';
-  matrix += '|--------|-------------|----------|--------------|--------|-------|\n';
+Generate a traceability matrix table: `Req ID | Requirement | Priority | Addressed By | Status | Score`.
 
-  const componentMap = mapRequirementsToComponents(requirements, components);
+For each requirement, identify addressing components by matching keywords:
+- `voltage` or `power` in requirement → power/regulator components
+- `wireless`, `ble`, or `wifi` → wireless/comms components
+- `temperature`, `humidity`, or `sensor` → sensor components
+- `processing` or `computation` → MCU/processor components
 
-  requirements.forEach(req => {
-    const addressing = componentMap[req.id] || { components: '-', status: 'Not Addressed' };
-    const score = { 'Full': '100%', 'Partial': '50%', 'Not Addressed': '0%' }[addressing.status];
-
-    matrix += `| ${req.id} | ${req.description} | ${req.priority} | `;
-    matrix += `${addressing.components} | ${addressing.status} | ${score} |\n`;
-  });
-
-  return matrix;
-}
-
-function mapRequirementsToComponents(requirements, components) {
-  // Map each requirement to component(s) that address it
-  // This requires analyzing requirement text and component descriptions
-
-  const componentMap = {};
-
-  requirements.forEach(req => {
-    const reqLower = req.description.toLowerCase();
-    const addressing = [];
-
-    // Check each component for relevance to requirement
-    components.forEach(comp => {
-      const compLower = comp.description.toLowerCase();
-      const categoryLower = comp.category.toLowerCase();
-
-      // Example heuristics (expand based on domain):
-      // Power requirements
-      if (reqLower.includes('voltage') || reqLower.includes('power')) {
-        if (categoryLower.includes('power') || categoryLower.includes('regulator')) {
-          addressing.push(comp.mpn);
-        }
-      }
-
-      // Communication requirements
-      if (reqLower.includes('wireless') || reqLower.includes('ble') || reqLower.includes('wifi')) {
-        if (categoryLower.includes('wireless') || categoryLower.includes('comms')) {
-          addressing.push(comp.mpn);
-        }
-      }
-
-      // Sensor requirements
-      if (reqLower.includes('temperature') || reqLower.includes('humidity') || reqLower.includes('sensor')) {
-        if (categoryLower.includes('sensor')) {
-          addressing.push(comp.mpn);
-        }
-      }
-
-      // Processing requirements
-      if (reqLower.includes('processing') || reqLower.includes('computation')) {
-        if (categoryLower.includes('mcu') || categoryLower.includes('processor')) {
-          addressing.push(comp.mpn);
-        }
-      }
-    });
-
-    // Determine status based on addressing components
-    if (addressing.length === 0) {
-      componentMap[req.id] = {
-        components: '-',
-        status: 'Not Addressed'
-      };
-    } else {
-      // Determine if Full or Partial based on requirement specifics
-      // Default to Partial when in doubt (per 07-RESEARCH.md Pitfall 3)
-      componentMap[req.id] = {
-        components: addressing.join(', '),
-        status: 'Partial',  // Conservative default
-        partialReason: 'Component contributes but may not fully satisfy requirement'
-      };
-
-      // Upgrade to Full if component clearly satisfies requirement
-      // (This requires domain-specific logic)
-    }
-  });
-
-  return componentMap;
-}
-```
+Assign status and score:
+- Components found and clearly satisfy requirement → `Full` (100%)
+- Components found but partially satisfy → `Partial` (50%) — use as conservative default when in doubt
+- No components found → `Not Addressed` (0%)
 
 **Addressed Status Definitions (from 07-CONTEXT.md):**
 - **Full (100%):** Component(s) completely satisfy the requirement
@@ -4905,83 +2815,26 @@ Calculate overall specification coverage using priority weights.
 
 **Implementation (from 07-RESEARCH.md Pattern 3):**
 
-```javascript
-function calculateWeightedCoverage(requirements, componentMap) {
-  const weights = {
-    'Critical': 0.50,
-    'Important': 0.30,
-    'Nice-to-have': 0.20
-  };
+**Scoring:** `Full` = 100 pts, `Partial` = 50 pts, `Not Addressed` = 0 pts.
 
-  const scores = {
-    'Full': 100,
-    'Partial': 50,
-    'Not Addressed': 0
-  };
+**Per-tier coverage:** sum of requirement scores ÷ (count × 100). Empty tier = 100% (no requirements = no gaps).
 
-  // Group requirements by priority
-  const groups = {
-    'Critical': [],
-    'Important': [],
-    'Nice-to-have': []
-  };
-
-  requirements.forEach(req => {
-    const addressing = componentMap[req.id];
-    const score = scores[addressing.status];
-    groups[req.priority].push({ req, score });
-  });
-
-  // Calculate per-tier coverage
-  const tierCoverage = {};
-  for (const [priority, reqs] of Object.entries(groups)) {
-    if (reqs.length === 0) {
-      // Empty tier = 100% covered (no requirements = no gaps)
-      tierCoverage[priority] = 1.0;
-      continue;
-    }
-    const totalPossible = reqs.length * 100;
-    const actualScore = reqs.reduce((sum, r) => sum + r.score, 0);
-    tierCoverage[priority] = actualScore / totalPossible;
-  }
-
-  // Weighted sum
-  const overall =
-    tierCoverage['Critical'] * weights['Critical'] +
-    tierCoverage['Important'] * weights['Important'] +
-    tierCoverage['Nice-to-have'] * weights['Nice-to-have'];
-
-  return {
-    overall: Math.round(overall * 100),  // percentage
-    byTier: {
-      'Critical': Math.round(tierCoverage['Critical'] * 100),
-      'Important': Math.round(tierCoverage['Important'] * 100),
-      'Nice-to-have': Math.round(tierCoverage['Nice-to-have'] * 100)
-    },
-    passes: overall >= 0.80,
-    threshold: 80
-  };
-}
-```
+**Weighted overall:** `(Critical × 0.50) + (Important × 0.30) + (Nice-to-have × 0.20)`. Result rounded to nearest integer. Passes if ≥ 80%.
 
 **Coverage Summary Format:**
 
-```javascript
-function generateCoverageSummary(coverage, gapCount) {
-  let summary = '\n## Coverage Summary\n\n';
-  summary += `**Overall Coverage:** ${coverage.overall}%\n`;
-  summary += `**Status:** ${coverage.passes ? 'PASS' : 'FAIL'} (threshold: ${coverage.threshold}%)\n\n`;
+**Coverage Summary format:**
+```
+**Overall Coverage:** {X}%
+**Status:** PASS|FAIL (threshold: 80%)
 
-  summary += '| Priority | Coverage |\n';
-  summary += '|----------|----------|\n';
-  summary += `| Critical | ${coverage.byTier['Critical']}% |\n`;
-  summary += `| Important | ${coverage.byTier['Important']}% |\n`;
-  summary += `| Nice-to-have | ${coverage.byTier['Nice-to-have']}% |\n\n`;
+| Priority     | Coverage |
+|--------------|----------|
+| Critical     | {X}%     |
+| Important    | {X}%     |
+| Nice-to-have | {X}%     |
 
-  summary += `**Gaps Identified:** ${gapCount} requirement(s) not fully addressed\n`;
-
-  return summary;
-}
+**Gaps Identified:** {N} requirement(s) not fully addressed
 ```
 
 ### COVERAGE COMPARISON VIEW
@@ -4990,44 +2843,12 @@ Generate single comparison table showing all concepts for decision-making.
 
 **Format (from 07-RESEARCH.md Pattern 4):**
 
-```javascript
-function generateComparisonTable(conceptAnalyses) {
-  let comparison = '# Coverage Comparison\n\n';
-  comparison += '| Concept | Coverage | Critical | Important | Nice | Gaps | Est. Cost | Status |\n';
-  comparison += '|---------|----------|----------|-----------|------|------|-----------|--------|\n';
+Generate a comparison table: `Concept | Coverage | Critical | Important | Nice | Gaps | Est. Cost | Status`.
 
-  conceptAnalyses.forEach(analysis => {
-    const status = analysis.coverage.overall >= 80 ? 'PASS' : 'FAIL';
-    comparison += `| ${analysis.conceptName} | ${analysis.coverage.overall}% | `;
-    comparison += `${analysis.coverage.byTier['Critical']}% | `;
-    comparison += `${analysis.coverage.byTier['Important']}% | `;
-    comparison += `${analysis.coverage.byTier['Nice-to-have']}% | `;
-    comparison += `${analysis.gapCount} | $${analysis.bomCost.toFixed(2)} | ${status} |\n`;
-  });
-
-  comparison += '\n### Legend\n';
-  comparison += '- **Coverage:** Weighted overall coverage (50/30/20)\n';
-  comparison += '- **Critical/Important/Nice:** Per-tier coverage percentages\n';
-  comparison += '- **Gaps:** Count of Not Addressed requirements\n';
-  comparison += '- **Status:** PASS (>=80%) or FAIL (<80%)\n\n';
-
-  // Recommendation
-  const passingConcepts = conceptAnalyses.filter(a => a.coverage.overall >= 80);
-  if (passingConcepts.length > 0) {
-    const best = passingConcepts.sort((a, b) => b.coverage.overall - a.coverage.overall)[0];
-    comparison += '### Recommendation\n';
-    comparison += `**${best.conceptName}** recommended for highest coverage (${best.coverage.overall}%) `;
-    comparison += `with ${best.gapCount} gap(s).\n`;
-  } else {
-    comparison += '### Note\n';
-    comparison += 'All concepts below 80% threshold. Review gap suggestions and consider:\n';
-    comparison += '- Relaxing requirements that may be overly strict\n';
-    comparison += '- Proceeding with best-available concept and addressing gaps in Phase 2 (Refinement)\n';
-  }
-
-  return comparison;
-}
-```
+- Status = `PASS` if coverage ≥ 80%, else `FAIL`.
+- Legend: Coverage = weighted overall (50/30/20); Gaps = count of Not Addressed requirements.
+- If ≥1 concept passes: add `### Recommendation` naming the highest-coverage passing concept.
+- If all fail: add `### Note` suggesting relaxing requirements or proceeding with best-available concept.
 
 ### GAP RESOLUTION SUGGESTIONS
 
@@ -5035,72 +2856,17 @@ For each Not Addressed or Partial requirement, provide actionable suggestions.
 
 **Format (from 07-RESEARCH.md Pattern 5):**
 
-```javascript
-function generateGapSuggestions(requirements, componentMap) {
-  const gaps = requirements.filter(req => {
-    const addressing = componentMap[req.id];
-    return addressing.status !== 'Full';
-  });
+For each requirement with status `Partial` or `Not Addressed`, output a subsection `### {id}: {description} ({status})`:
 
-  if (gaps.length === 0) {
-    return '\n## Gaps and Suggestions\n\nNo gaps identified - all requirements fully addressed.\n';
-  }
+- **Gap:** Describe what is missing or partially satisfied.
+- **Impact:** Requirement not satisfied / partially satisfied; may need enhancement.
+- **Suggestions:** 2–4 actionable items based on requirement type:
+  - power/voltage → add regulator or PMIC; review power budget; revisit spec
+  - communication/interface → add comms module; use MCU with integrated peripheral; consider alternative protocol
+  - sensor/measurement → add sensor to BOM; verify MCU ADC/interface; consider multi-sensor module
+  - generic → add addressing component; enhance existing component; revisit requirement necessity; defer to Phase 2
 
-  let suggestions = '\n## Gaps and Suggestions\n\n';
-
-  gaps.forEach(req => {
-    const addressing = componentMap[req.id];
-    suggestions += `### ${req.id}: ${req.description} (${addressing.status})\n\n`;
-
-    // Describe the gap specifically
-    if (addressing.status === 'Not Addressed') {
-      suggestions += `**Gap:** No component currently addresses this requirement.\n`;
-      suggestions += `**Impact:** Requirement not satisfied in current design.\n`;
-    } else {
-      suggestions += `**Gap:** ${addressing.partialReason || 'Component partially satisfies requirement.'}\n`;
-      suggestions += `**Impact:** Requirement partially satisfied; may need enhancement.\n`;
-    }
-
-    // Provide actionable suggestions
-    suggestions += '**Suggestions:**\n';
-    suggestions += generateSuggestionsForRequirement(req, addressing);
-    suggestions += '\n';
-  });
-
-  return suggestions;
-}
-
-function generateSuggestionsForRequirement(req, addressing) {
-  // Generate 2-3 actionable suggestions based on requirement type
-  // This is domain-specific and requires reasoning about the requirement
-
-  let suggestions = '';
-  const reqLower = req.description.toLowerCase();
-
-  // Example suggestions based on common requirement patterns
-  if (reqLower.includes('power') || reqLower.includes('voltage')) {
-    suggestions += '1. Add appropriate voltage regulator or power management IC\n';
-    suggestions += '2. Review power budget and consider higher-capacity power supply\n';
-    suggestions += '3. Revisit requirement to confirm if voltage spec is truly needed\n';
-  } else if (reqLower.includes('communication') || reqLower.includes('interface')) {
-    suggestions += '1. Add dedicated communication module (e.g., BLE, WiFi, LoRa)\n';
-    suggestions += '2. Use MCU with integrated communication peripherals\n';
-    suggestions += '3. Consider alternative communication protocol if requirement allows\n';
-  } else if (reqLower.includes('sensor') || reqLower.includes('measurement')) {
-    suggestions += '1. Add specific sensor component to BOM\n';
-    suggestions += '2. Verify MCU has appropriate ADC/interface for sensor\n';
-    suggestions += '3. Consider multi-sensor module if measuring multiple parameters\n';
-  } else {
-    // Generic suggestions when specific domain pattern not matched
-    suggestions += '1. Add component to address this requirement\n';
-    suggestions += '2. Enhance existing component capability if possible\n';
-    suggestions += '3. Revisit requirement to confirm necessity and specifications\n';
-    suggestions += '4. Defer to Phase 2 (Refinement) for detailed resolution\n';
-  }
-
-  return suggestions;
-}
-```
+If no gaps: output "No gaps identified - all requirements fully addressed."
 
 **Key Principles (from 07-RESEARCH.md):**
 - Be specific about the gap (what's missing, what's the shortfall)
@@ -5157,11 +2923,9 @@ File structure:
 
 **Update state file** `.librespin/state.md` — set `phase` to `5-concept-generation`:
 
-```javascript
-const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
-const updatedState = existingState.replace(/^phase: .+$/m, `phase: '5-concept-generation'`);
-fs.writeFileSync('.librespin/state.md', updatedState);
-```
+- Read `.librespin/state.md`.
+- Replace the `phase: ...` frontmatter field value with `'5-concept-generation'`.
+- Write the updated content back to `.librespin/state.md`.
 
 ## PHASE 6: SELF-CRITIQUE & REFINEMENT
 
@@ -5195,14 +2959,13 @@ qualityScore = (coverage × 0.60) + (cost × 0.15) + (availability × 0.15) + (c
 ```
 
 **Weight Constants:**
-```javascript
-const weights = {
-  coverage: 0.60,    // 60% - Requirement coverage (from Phase 1)
-  cost: 0.15,        // 15% - Cost relative to other concepts
-  availability: 0.15, // 15% - Lead time + stock availability
-  complexity: 0.10   // 10% - Design complexity (BOM lines, interfaces, rails)
-};
-```
+
+| Dimension | Weight | Source |
+|-----------|--------|--------|
+| coverage | 0.60 (60%) | Requirement coverage from Phase 5 |
+| cost | 0.15 (15%) | Cost relative to other concepts |
+| availability | 0.15 (15%) | Lead time + stock availability |
+| complexity | 0.10 (10%) | Design complexity: BOM lines, interfaces, power rails |
 
 ---
 
@@ -5210,42 +2973,13 @@ const weights = {
 
 **Purpose:** Calculate composite weighted quality score for a concept.
 
-**Implementation:**
-```javascript
-function calculateQualityScore(concept, allConcepts) {
-  const weights = { coverage: 0.60, cost: 0.15, availability: 0.15, complexity: 0.10 };
-
-  // Coverage: Use Phase 1 weighted coverage (0-100%)
-  const coverageScore = concept.coverageScore; // Already calculated in Phase 1
-
-  // Cost: Relative scoring (cheapest = 100%, most expensive = 0%)
-  const costScore = calculateRelativeCost(concept, allConcepts);
-
-  // Availability: Combined lead time + stock (average of sub-scores)
-  const availabilityScore = calculateAvailabilityScore(concept);
-
-  // Complexity: Multi-factor assessment
-  const complexityScore = calculateComplexityScore(concept);
-
-  // Composite weighted score
-  const qualityScore =
-    (coverageScore * weights.coverage) +
-    (costScore * weights.cost) +
-    (availabilityScore * weights.availability) +
-    (complexityScore * weights.complexity);
-
-  return {
-    overall: Math.round(qualityScore),
-    breakdown: {
-      coverage: Math.round(coverageScore),
-      cost: Math.round(costScore),
-      availability: Math.round(availabilityScore),
-      complexity: Math.round(complexityScore)
-    },
-    weights: weights
-  };
-}
-```
+**Steps:**
+- Use Phase 5 weighted coverage score (0–100%) as `coverageScore`.
+- Calculate `costScore` via relative cost scoring (cheapest = 100%, most expensive = 0%).
+- Calculate `availabilityScore` as average of lead-time score and stock score for key components.
+- Calculate `complexityScore` as weighted average of BOM count, interface diversity, power rail count, and topology.
+- Compute: `overall = round((coverageScore × 0.60) + (costScore × 0.15) + (availabilityScore × 0.15) + (complexityScore × 0.10))`.
+- Return `overall` and `breakdown` (each dimension score, rounded).
 
 ---
 
@@ -5253,31 +2987,10 @@ function calculateQualityScore(concept, allConcepts) {
 
 **Purpose:** Score concepts relative to each other (cheapest = 100%, most expensive = 0%).
 
-**Implementation:**
-```javascript
-function calculateRelativeCost(concept, allConcepts) {
-  // Get all BOM costs
-  const costs = allConcepts.map(c => c.bomCost);
-  const minCost = Math.min(...costs);
-  const maxCost = Math.max(...costs);
-
-  // Handle edge case: all same cost OR single concept
-  if (minCost === maxCost) {
-    return 100; // All concepts equally good on cost
-  }
-
-  // Linear interpolation: cheapest = 100%, most expensive = 0%
-  const costScore = 100 * (1 - (concept.bomCost - minCost) / (maxCost - minCost));
-
-  return Math.round(costScore);
-}
-
-// Example:
-// Concepts: A=$25, B=$50, C=$100
-// A: 100 * (1 - (25-25)/(100-25)) = 100%
-// B: 100 * (1 - (50-25)/(100-25)) = 67%
-// C: 100 * (1 - (100-25)/(100-25)) = 0%
-```
+- Get `minCost` and `maxCost` from all concepts' BOM totals.
+- If all costs are equal (or single concept): return 100 (no cost differentiation).
+- Otherwise: `costScore = round(100 × (1 − (concept.bomCost − minCost) / (maxCost − minCost)))`.
+- Example: A=$25, B=$50, C=$100 → A=100%, B=67%, C=0%.
 
 ---
 
@@ -5285,52 +2998,15 @@ function calculateRelativeCost(concept, allConcepts) {
 
 **Purpose:** Calculate combined lead time + stock availability score for key components.
 
-**Key Component Filter:**
-```javascript
-function isKeyComponent(part) {
-  const keyCategories = ['MCU', 'Microcontroller', 'Regulator', 'Connector', 'Wireless', 'Sensor'];
-  return keyCategories.some(cat =>
-    part.category?.includes(cat) || part.description?.includes(cat)
-  );
-}
-```
+**Key Component Filter:** A part is "key" if its category or description contains any of: `MCU`, `Microcontroller`, `Regulator`, `Connector`, `Wireless`, `Sensor`. Skip passives (resistors, capacitors).
 
-**Implementation:**
-```javascript
-function calculateAvailabilityScore(concept) {
-  let totalLeadTimeScore = 0;
-  let totalStockScore = 0;
-  let keyComponentCount = 0;
+For each key component:
+- Lead time score: `max(0, 100 − (leadTimeWeeks × 12.5))` — in stock (0 weeks) = 100%; ≥8 weeks = 0%.
+- Stock score: `min(100, stockQuantity / 10)` — 1000+ units = 100%; 0 units = 0%.
 
-  // Only score key components (MCU, regulators, connectors)
-  // Skip passives (resistors, capacitors)
-  concept.bom
-    .filter(part => isKeyComponent(part))
-    .forEach(part => {
-      // Lead time score (0-100%)
-      // In stock (0 weeks) = 100%, 8+ weeks = 0%, linear interpolation
-      const leadTimeScore = Math.max(0, 100 - (part.leadTimeWeeks * 12.5));
+Availability score = `round((avgLeadTime + avgStock) / 2)` across all key components.
 
-      // Stock score (0-100%)
-      // 1000+ units = 100%, 0 units = 0%, linear interpolation
-      const stockScore = Math.min(100, part.stockQuantity / 10);
-
-      totalLeadTimeScore += leadTimeScore;
-      totalStockScore += stockScore;
-      keyComponentCount++;
-    });
-
-  // Handle no-key-components edge case
-  if (keyComponentCount === 0) return 100; // No key components = no sourcing risk
-
-  // Average of lead time and stock scores
-  const avgLeadTime = totalLeadTimeScore / keyComponentCount;
-  const avgStock = totalStockScore / keyComponentCount;
-
-  // Combined score (average of both sub-scores)
-  return Math.round((avgLeadTime + avgStock) / 2);
-}
-```
+If no key components found: return 100 (no sourcing risk).
 
 ---
 
@@ -5353,44 +3029,9 @@ function calculateAvailabilityScore(concept) {
 - Power rails: 25%
 - Topology: 20%
 
-**Implementation:**
-```javascript
-function calculateComplexityScore(concept) {
-  // BOM line count
-  const bomLines = concept.bom.length;
-  const bomScore = bomLines <= 15 ? 100 :
-                   bomLines <= 25 ? 85 :
-                   bomLines <= 40 ? 70 :
-                   bomLines <= 60 ? 50 : 30;
-
-  // Interface diversity (count unique interface types)
-  const interfaces = new Set(concept.interfaces || []);
-  const interfaceScore = interfaces.size <= 3 ? 100 :
-                         interfaces.size <= 5 ? 80 :
-                         interfaces.size <= 8 ? 60 : 40;
-
-  // Power rail count
-  const railCount = concept.powerRails?.length || 1;
-  const railScore = railCount <= 2 ? 100 :
-                    railCount <= 4 ? 75 :
-                    railCount <= 6 ? 50 : 25;
-
-  // Topology complexity (qualitative assessment)
-  // Simple: linear, single MCU
-  // Moderate: multiple subsystems or complex routing
-  // Complex: distributed, mesh, custom protocols
-  const topologyScore = concept.topologyComplexity === 'simple' ? 100 :
-                        concept.topologyComplexity === 'moderate' ? 65 : 30;
-
-  // Weighted average (30/25/25/20)
-  return Math.round(
-    (bomScore * 0.30) +
-    (interfaceScore * 0.25) +
-    (railScore * 0.25) +
-    (topologyScore * 0.20)
-  );
-}
-```
+- Score each factor using the tiers above, then compute: `round((bomScore × 0.30) + (interfaceScore × 0.25) + (railScore × 0.25) + (topologyScore × 0.20))`.
+- Topology: simple = linear/single MCU (100%); moderate = multiple subsystems/complex routing (65%); complex = distributed/mesh/custom protocols (30%).
+- Default power rail count to 1 if not specified.
 
 ---
 
@@ -5420,37 +3061,10 @@ function calculateComplexityScore(concept) {
 
 **Purpose:** Load and validate iteration_limit from config with default fallback.
 
-**Implementation:**
-```javascript
-function loadIterationConfig() {
-  // Read librespin-concept-config.yaml
-  const configPath = '.librespin/config.yaml';
-  const config = readYAML(configPath);
-
-  // Check for iteration_limit field
-  if (config.iteration_limit === undefined) {
-    // Create field with default value 5
-    config.iteration_limit = 5;
-    writeYAML(configPath, config);
-    return 5;
-  }
-
-  // Validate it's a number between 1-10
-  const limit = config.iteration_limit;
-  if (typeof limit !== 'number' || limit < 1 || limit > 10) {
-    // STOP with error message (per CLAUDE.md error handling)
-    throw new Error(
-      `Invalid iteration_limit: ${limit}. ` +
-      `Must be a number between 1 and 10. ` +
-      `Check .librespin/config.yaml`
-    );
-  }
-
-  return limit;
-}
-```
-
-**Default:** 5 iterations (configurable 1-10).
+- Read `iteration_limit` from `.librespin/config.yaml`.
+- If field is absent: write default value `5` back to the config file and return 5.
+- If field is present but not a number between 1–10: STOP with error "Invalid iteration_limit: {value}. Must be a number between 1 and 10. Check .librespin/config.yaml".
+- Default: 5 iterations (configurable 1–10).
 
 ---
 
@@ -5460,38 +3074,10 @@ function loadIterationConfig() {
 
 **Threshold:** 5% (0.05) per CONTEXT.md "lenient plateau detection".
 
-**Implementation:**
-```javascript
-function detectPlateau(currentScore, previousScore, threshold = 0.05) {
-  // First iteration has no previous score
-  if (previousScore === null || previousScore === 0) {
-    return { isPlateau: false, improvement: null, message: 'First iteration - no baseline' };
-  }
-
-  // Calculate relative improvement
-  const absoluteImprovement = currentScore - previousScore;
-  const relativeImprovement = absoluteImprovement / previousScore;
-
-  // Plateau if improvement < threshold (5%)
-  const isPlateau = relativeImprovement < threshold;
-
-  return {
-    isPlateau,
-    improvement: Math.round(relativeImprovement * 100), // As percentage
-    absoluteImprovement: Math.round(absoluteImprovement * 10) / 10,
-    message: isPlateau
-      ? `Plateau detected: ${(relativeImprovement * 100).toFixed(1)}% improvement < 5% threshold`
-      : `Continuing: ${(relativeImprovement * 100).toFixed(1)}% improvement >= 5% threshold`
-  };
-}
-
-// Example:
-// Previous: 72%, Current: 74%
-// Improvement: (74-72)/72 = 2.8% < 5% -> PLATEAU
-//
-// Previous: 65%, Current: 72%
-// Improvement: (72-65)/65 = 10.8% >= 5% -> CONTINUE
-```
+- If first iteration (no previous score): no plateau — return `{isPlateau: false}`.
+- Compute `relativeImprovement = (currentScore - previousScore) / previousScore`.
+- Plateau if `relativeImprovement < 0.05` (5% threshold).
+- Examples: 72%→74% improvement = 2.8% → PLATEAU; 65%→72% improvement = 10.8% → CONTINUE.
 
 ---
 
@@ -5504,32 +3090,9 @@ function detectPlateau(currentScore, previousScore, threshold = 0.05) {
 1. **Top 3 clearly separated:** Top 3 concepts are >10% better than average of remaining concepts
 2. **Rescue candidates identified:** Any concept in 70-79% range while others are <70%
 
-**Implementation:**
-```javascript
-function shouldTransitionToFocused(scores) {
-  const sortedScores = scores.map(s => s.score).sort((a, b) => b - a);
-
-  // Heuristic 1: Top 3 concepts clearly separated from rest
-  if (scores.length > 3) {
-    const topThreeAvg = (sortedScores[0] + sortedScores[1] + sortedScores[2]) / 3;
-    const restAvg = sortedScores.slice(3).reduce((a, b) => a + b, 0) / (sortedScores.length - 3);
-
-    // Transition if top 3 are >10% better than rest
-    if ((topThreeAvg - restAvg) > 10) {
-      return true;
-    }
-  }
-
-  // Heuristic 2: Rescue candidates identified
-  const rescueCandidates = scores.filter(s => s.score >= 70 && s.score < 80);
-  const belowRescue = scores.filter(s => s.score < 70);
-  if (rescueCandidates.length > 0 && belowRescue.length > 0) {
-    return true;
-  }
-
-  return false;
-}
-```
+Transition to focused mode when either condition is true:
+- Heuristic 1: More than 3 concepts exist AND average of top 3 scores exceeds average of remaining scores by >10 points.
+- Heuristic 2: Any concept is in the 70–79% range AND at least one concept is below 70%.
 
 ---
 
@@ -5589,72 +3152,15 @@ PHASE 8 SELF-CRITIQUE & REFINEMENT WORKFLOW:
 
 **Purpose:** Handle case when no concepts reach 80% threshold after all iterations.
 
-**Implementation:**
-```javascript
-function handleAllFailScenario(concepts, iterations) {
-  const sortedByScore = concepts
-    .map(c => ({ name: c.name, score: calculateQualityScore(c).overall }))
-    .sort((a, b) => b.score - a.score);
-
-  const bestScore = sortedByScore[0].score;
-  const bestConcept = sortedByScore[0].name;
-
-  // Analyze common issues across concepts
-  const commonIssues = analyzeCommonFailureReasons(concepts);
-
-  return {
-    status: 'all_failed',
-    iterations: iterations,
-    bestScore: bestScore,
-    bestConcept: bestConcept,
-    conceptScores: sortedByScore,
-    commonIssues: commonIssues,
-    message: `
-All ${concepts.length} concepts failed to reach 80% threshold after ${iterations} iterations.
-
-**Highest score:** ${bestConcept} (${bestScore.toFixed(1)}%)
-
-**Common issues identified:**
-${commonIssues.map(i => `- ${i}`).join('\n')}
-
-**Suggested actions:**
-1. Relax requirements that caused most coverage failures
-2. Increase budget if cost was limiting factor
-3. Extend timeline if availability was the constraint
-4. Simplify design if complexity dominated
-
-**Options:**
-- Proceed with best available concept (${bestConcept})
-- Return to Phase 1 to relax requirements
-- Provide additional context to improve concept quality
-
-User input required to proceed.`,
-    suggestions: [
-      'Relax requirements causing coverage gaps',
-      'Increase cost budget',
-      'Accept longer lead times',
-      'Simplify design complexity',
-      'Proceed with best available'
-    ]
-  };
-}
-
-function analyzeCommonFailureReasons(concepts) {
-  const issues = [];
-
-  // Check coverage dimension
-  const avgCoverage = concepts.reduce((sum, c) => sum + c.coverageScore, 0) / concepts.length;
-  if (avgCoverage < 80) {
-    issues.push(`Low coverage (avg ${avgCoverage.toFixed(0)}%): requirements may be too stringent`);
-  }
-
-  // Check cost dimension (would need allConcepts context for relative scoring)
-  // Check availability dimension
-  // These would analyze breakdown scores if available
-
-  return issues.length > 0 ? issues : ['Multiple factors below threshold'];
-}
-```
+- Sort all concepts by quality score (descending); identify `bestConcept` and `bestScore`.
+- Identify common failure reasons: if average coverage score across concepts is <80%, report "Low coverage (avg {X}%): requirements may be too stringent". If no specific dimension identified, report "Multiple factors below threshold".
+- Output message to the user including:
+  - "All {N} concepts failed to reach 80% threshold after {iterations} iterations."
+  - Highest score: `{bestConcept} ({bestScore}%)`
+  - Common issues identified (bulleted)
+  - Suggested actions: relax coverage requirements; increase budget; accept longer lead times; simplify design
+  - Options: proceed with best available; return to Phase 5 to relax requirements; provide additional context
+  - Prompt for user input before proceeding.
 
 ---
 
@@ -5696,103 +3202,18 @@ python -m digikey.alternatives "MPN"
 
 Main verification entry point. Called by iteration loop at first and last iteration only.
 
-```javascript
-async function verifyComponentClaims(concept) {
-  const verificationResults = [];
+For each key component (filter passives), run these checks via `python -m digikey.details "MPN"` and `python -m digikey.availability "MPN"`:
 
-  // Get key components only (MCU, regulators, connectors)
-  // Skip passives (resistors, capacitors)
-  const keyComponents = concept.bom.filter(part => isKeyComponent(part));
+| Check | Pass Condition | Fail/Flag Condition | Action |
+|-------|---------------|---------------------|--------|
+| existence | Part found in DigiKey | Part not found | FAIL → find_alternative |
+| datasheet | URL present | URL missing | WARN |
+| pricing | Price within 25% of BOM estimate | Price deviation >25% | FLAG → update_bom_cost |
+| lifecycle | Status = Active | NRND or Obsolete | FAIL → find_replacement |
+| availability | Stock ≥100 OR lead time ≤8 weeks | Both below threshold | FLAG → find_alternative |
+| rohs | RoHS Compliant | Non-compliant or unknown | WARN |
 
-  for (const part of keyComponents) {
-    const result = { mpn: part.mpn, category: part.category, checks: [] };
-
-    // Call DigiKey API: python -m digikey.details "MPN"
-    const details = await callDigiKeyDetails(part.mpn);
-
-    if (!details || details.error) {
-      result.checks.push({
-        check: 'existence',
-        status: 'FAIL',
-        message: `Part not found in DigiKey: ${part.mpn}`,
-        action: 'find_alternative'
-      });
-      verificationResults.push(result);
-      continue;
-    }
-
-    // Check 1: Datasheet URL accessible
-    result.checks.push({
-      check: 'datasheet',
-      status: details.datasheet_url ? 'PASS' : 'WARN',
-      value: details.datasheet_url || 'Not available'
-    });
-
-    // Check 2: Price within 25% of BOM estimate (threshold per CONTEXT.md)
-    const priceChange = Math.abs(details.unit_price - part.estimatedPrice) / part.estimatedPrice;
-    result.checks.push({
-      check: 'pricing',
-      status: priceChange <= 0.25 ? 'PASS' : 'FLAG',
-      bomPrice: part.estimatedPrice,
-      actualPrice: details.unit_price,
-      change: `${(priceChange * 100).toFixed(0)}%`,
-      action: priceChange > 0.25 ? 'update_bom_cost' : null
-    });
-
-    // Check 3: Lifecycle status (Active required, NRND/Obsolete = FAIL)
-    if (details.lifecycle === 'Active') {
-      result.checks.push({ check: 'lifecycle', status: 'PASS', value: 'Active' });
-    } else {
-      result.checks.push({
-        check: 'lifecycle',
-        status: 'FAIL',
-        value: details.lifecycle,
-        message: `Part is ${details.lifecycle}`,
-        action: 'find_replacement'
-      });
-    }
-
-    // Check 4: Stock and lead time (threshold: >8 weeks or <100 stock)
-    const availability = await callDigiKeyAvailability(part.mpn);
-    const stockOk = availability.stock >= 100;
-    const leadTimeOk = availability.lead_time_weeks <= 8;
-    result.checks.push({
-      check: 'availability',
-      status: (stockOk || leadTimeOk) ? 'PASS' : 'FLAG',
-      stock: availability.stock,
-      leadTime: `${availability.lead_time_weeks} weeks`,
-      action: (!stockOk && !leadTimeOk) ? 'find_alternative' : null
-    });
-
-    // Check 5: RoHS compliance status
-    result.checks.push({
-      check: 'rohs',
-      status: details.rohs_status === 'Compliant' ? 'PASS' : 'WARN',
-      value: details.rohs_status || 'Unknown'
-    });
-
-    verificationResults.push(result);
-  }
-
-  return verificationResults;
-}
-```
-
-**Verification Result Format:**
-```javascript
-{
-  mpn: string,
-  category: string,
-  checks: [
-    { check: 'existence', status: 'PASS'|'FAIL', ... },
-    { check: 'datasheet', status: 'PASS'|'WARN', value: url },
-    { check: 'pricing', status: 'PASS'|'FLAG', bomPrice: X, actualPrice: Y, change: 'N%' },
-    { check: 'lifecycle', status: 'PASS'|'FAIL', value: 'Active'|'NRND'|'Obsolete' },
-    { check: 'availability', status: 'PASS'|'FLAG', stock: N, leadTime: 'X weeks' },
-    { check: 'rohs', status: 'PASS'|'WARN', value: 'Compliant'|... }
-  ]
-}
-```
+If DigiKey API returns an error for a part: log FAIL (existence), skip remaining checks for that part, continue to next.
 
 **Verification Display Format:**
 ```markdown
@@ -5813,118 +3234,17 @@ async function verifyComponentClaims(concept) {
 
 **When to call:** When verifyComponentClaims detects lifecycle, availability, or existence failures.
 
-```javascript
-async function autoFixVerificationFailure(part, failureType) {
-  // Find alternatives using DigiKey API
-  // python -m digikey.alternatives "MPN"
-  const alternatives = await callDigiKeyAlternatives(part.mpn);
-
-  if (!alternatives || alternatives.length === 0) {
-    return {
-      status: 'no_replacement',
-      message: `No alternatives found for ${part.mpn}`,
-      originalPart: part.mpn,
-      action: 'suggest_to_user'
-    };
-  }
-
-  // Filter alternatives based on failure type
-  let validAlternatives;
-
-  if (failureType === 'lifecycle') {
-    // Find Active alternatives only
-    validAlternatives = alternatives.filter(alt =>
-      alt.lifecycle === 'Active'
-    );
-  } else if (failureType === 'availability') {
-    // Find in-stock (>100) or short lead time (<=8 weeks)
-    validAlternatives = alternatives.filter(alt =>
-      alt.stock > 100 || alt.lead_time_weeks <= 8
-    );
-  } else if (failureType === 'price') {
-    // Find within 50% of original estimate
-    validAlternatives = alternatives.filter(alt =>
-      alt.unit_price <= part.estimatedPrice * 1.5
-    );
-  } else if (failureType === 'existence') {
-    // Any valid alternative is acceptable
-    validAlternatives = alternatives.filter(alt =>
-      alt.lifecycle === 'Active' && (alt.stock > 100 || alt.lead_time_weeks <= 8)
-    );
-  }
-
-  if (!validAlternatives || validAlternatives.length === 0) {
-    return {
-      status: 'no_valid_replacement',
-      message: `Alternatives found but none meet criteria for ${part.mpn}`,
-      originalPart: part.mpn,
-      alternatives: alternatives.slice(0, 3), // Show top 3 for user
-      action: 'suggest_to_user'
-    };
-  }
-
-  // Select best alternative: balance cost, availability, vendor reputation
-  const selectedAlt = selectBestAlternative(validAlternatives, part.estimatedPrice);
-
-  return {
-    status: 'auto_fixed',
-    originalPart: part.mpn,
-    replacement: selectedAlt.mpn,
-    manufacturer: selectedAlt.manufacturer,
-    reason: `Replaced due to ${failureType} issue`,
-    newPrice: selectedAlt.unit_price,
-    newStock: selectedAlt.stock,
-    newLeadTime: selectedAlt.lead_time_weeks
-  };
-}
-
-function selectBestAlternative(alternatives, originalPrice) {
-  // Score alternatives: balance cost, availability, simplicity (vendor reputation)
-  // Per CONTEXT.md: prefer DigiKey > Mouser > Arrow/Newark
-  const preferredManufacturers = [
-    'Texas Instruments', 'STMicroelectronics', 'Microchip',
-    'Nordic Semiconductor', 'Analog Devices', 'NXP'
-  ];
-
-  return alternatives
-    .map(alt => {
-      // Lower price relative to original = higher score
-      const priceScore = 100 - Math.min(100, (alt.unit_price / originalPrice) * 50);
-
-      // More stock = higher score (capped at 1000)
-      const stockScore = Math.min(100, alt.stock / 10);
-
-      // Shorter lead time = higher score
-      const leadTimeScore = Math.max(0, 100 - (alt.lead_time_weeks * 12.5));
-
-      // Preferred manufacturer bonus
-      const vendorBonus = preferredManufacturers.some(m =>
-        alt.manufacturer?.includes(m)) ? 20 : 0;
-
-      return {
-        ...alt,
-        score: (priceScore * 0.30) + (stockScore * 0.25) +
-               (leadTimeScore * 0.25) + vendorBonus
-      };
-    })
-    .sort((a, b) => b.score - a.score)
-    [0];
-}
-
-async function callDigiKeyAlternatives(mpn) {
-  // Execute: python -m digikey.alternatives "MPN"
-  // Returns array of alternative parts
-  const result = await execBash(`python -m digikey.alternatives "${mpn}"`);
-  if (result.error) return null;
-  return JSON.parse(result.stdout);
-}
-```
-
-**Auto-fix Error Handling:**
-- If DigiKey API returns error or part not found: status = 'FAIL', action = 'find_alternative'
-- If no alternative found: status = 'no_replacement', escalate to user
-- Log all auto-fixes silently (reflected in final output, per CONTEXT.md)
-```
+- Call `python -m digikey.alternatives "MPN"` to get alternatives list.
+- If no alternatives returned: status = `no_replacement`, escalate to user.
+- Filter alternatives by failure type:
+  - `lifecycle` → Active alternatives only
+  - `availability` → stock >100 OR lead time ≤8 weeks
+  - `price` → unit price ≤ 1.5× original estimate
+  - `existence` → Active AND (stock >100 OR lead time ≤8 weeks)
+- If no alternatives pass the filter: status = `no_valid_replacement`, show top 3 to user.
+- Select best alternative by scoring: price score (30%) + stock score (25%) + lead time score (25%) + preferred manufacturer bonus (+20 if TI/ST/Microchip/Nordic/ADI/NXP).
+- Log all auto-fixes silently; reflect changes in final output only.
+- If API error: FAIL with action = `find_alternative`.
 
 ---
 
@@ -5949,66 +3269,10 @@ async function callDigiKeyAlternatives(mpn) {
 
 **Purpose:** Main gap closure entry point. Filters to Critical gaps and generates closure actions.
 
-```javascript
-function generateGapClosureActions(concept, gaps) {
-  const actions = [];
-
-  // Filter gaps to Critical priority only (per CONTEXT.md: "Targeted gap closure")
-  const criticalGaps = gaps.filter(gap => gap.priority === 'Critical');
-
-  // Skip Nice-to-have gaps explicitly (per CONTEXT.md: "accept Nice-to-have gaps")
-  const skippedGaps = gaps.filter(gap => gap.priority === 'Nice-to-have');
-  if (skippedGaps.length > 0) {
-    actions.push({
-      type: 'skip',
-      gaps: skippedGaps.map(g => g.id || g.requirement),
-      reason: 'Nice-to-have requirements accepted as gaps per strategy',
-      count: skippedGaps.length
-    });
-  }
-
-  // Process Important gaps with lower priority
-  const importantGaps = gaps.filter(gap => gap.priority === 'Important');
-
-  // Process Critical gaps first
-  for (const gap of criticalGaps) {
-    // Determine best closure action
-    const closureOptions = analyzeGapClosureOptions(gap, concept);
-
-    if (closureOptions.length === 0) {
-      // No viable closure - suggest requirement reinterpretation
-      actions.push({
-        type: 'requirement_reinterpretation',
-        gap: gap.id || gap.requirement,
-        requirement: gap.description || gap.requirement,
-        message: `No viable closure found for: ${gap.description || gap.requirement}`,
-        suggestion: `Consider relaxing requirement or accepting partial coverage`,
-        cost: 0,
-        complexity: 'low'
-      });
-      continue;
-    }
-
-    // Select best option (balance cost, availability, simplicity)
-    const selectedAction = selectBestClosureAction(closureOptions);
-    actions.push(selectedAction);
-  }
-
-  // Optionally process Important gaps if resources allow
-  for (const gap of importantGaps) {
-    const closureOptions = analyzeGapClosureOptions(gap, concept);
-    if (closureOptions.length > 0) {
-      const selectedAction = selectBestClosureAction(closureOptions);
-      // Only include if low complexity and low cost
-      if (selectedAction.complexity === 'low' && selectedAction.cost < 5) {
-        actions.push(selectedAction);
-      }
-    }
-  }
-
-  return actions;
-}
-```
+- Filter to Critical gaps only; log all Nice-to-have gaps as skipped ("accepted as gaps per strategy").
+- For each Critical gap: find closure options (swap, add, tweak); if none found, log `requirement_reinterpretation` ("Consider relaxing requirement or accepting partial coverage").
+- Select best option using priority order: low complexity first, then lower cost.
+- For Important gaps: also apply if best option is low complexity AND cost impact <$5.
 
 ---
 
@@ -6016,169 +3280,22 @@ function generateGapClosureActions(concept, gaps) {
 
 **Purpose:** Find all viable closure options for a given gap.
 
-```javascript
-function analyzeGapClosureOptions(gap, concept) {
-  const options = [];
+For each gap, evaluate these option types and collect all that apply:
 
-  // Option 1: Component swap
-  // Find existing component that partially addresses gap and find better replacement
-  const swapOption = findComponentSwap(gap, concept);
-  if (swapOption) {
-    options.push({
-      type: 'component_swap',
-      gap: gap.id || gap.requirement,
-      original: swapOption.originalPart,
-      replacement: swapOption.newPart,
-      reason: swapOption.reason,
-      cost: swapOption.costImpact,
-      complexity: 'low'  // Swaps are typically low complexity
-    });
-  }
+**component_swap** (complexity: low): Match gap keywords to BOM entries to find upgrade candidates:
+- `gpio` or `pin` → swap MCU for one with more GPIO pins (~$2 impact)
+- `current` or `power` → swap regulator for higher current variant (~$1 impact)
 
-  // Option 2: Component addition
-  // Identify new component that addresses gap
-  const addOption = findComponentAddition(gap, concept);
-  if (addOption) {
-    options.push({
-      type: 'component_addition',
-      gap: gap.id || gap.requirement,
-      newPart: addOption.part,
-      purpose: addOption.purpose,
-      cost: addOption.costImpact,
-      complexity: 'medium'  // Additions add to design complexity
-    });
-  }
+**component_addition** (complexity: medium): Match gap keywords to known additions:
+- `5v` or `boost` → TPS61200 boost converter (+$1.50)
+- `multiplexer` or `mux` → CD74HC4051 analog mux (+$0.80)
+- `level shift` or `voltage translation` → TXS0108E level shifter (+$1.20)
+- `esd` or `protection` → TPD4E05U06 ESD protection (+$0.50)
 
-  // Option 3: Architecture tweak
-  // Assess if connectivity/topology change helps
-  const tweakOption = findArchitectureTweak(gap, concept);
-  if (tweakOption) {
-    options.push({
-      type: 'architecture_tweak',
-      gap: gap.id || gap.requirement,
-      change: tweakOption.description,
-      impact: tweakOption.impact,
-      cost: tweakOption.costImpact,
-      complexity: tweakOption.complexity
-    });
-  }
-
-  return options;
-}
-
-function findComponentSwap(gap, concept) {
-  // Analyze gap requirements and find existing component that could be upgraded
-  // Example: gap needs more GPIO -> find MCU with more GPIO pins
-
-  const gapKeywords = (gap.description || gap.requirement || '').toLowerCase();
-
-  // Common swap patterns
-  if (gapKeywords.includes('gpio') || gapKeywords.includes('pin')) {
-    // Find MCU in BOM
-    const mcu = concept.bom.find(p => isKeyComponent(p) &&
-      (p.category?.includes('MCU') || p.description?.includes('Microcontroller')));
-    if (mcu) {
-      return {
-        originalPart: mcu.mpn,
-        newPart: '[Search for MCU with more GPIO]',
-        reason: 'Upgrade to MCU with more GPIO pins',
-        costImpact: 2  // Estimate
-      };
-    }
-  }
-
-  if (gapKeywords.includes('current') || gapKeywords.includes('power')) {
-    // Find regulator in BOM
-    const regulator = concept.bom.find(p =>
-      p.category?.includes('Regulator') || p.description?.includes('Regulator'));
-    if (regulator) {
-      return {
-        originalPart: regulator.mpn,
-        newPart: '[Search for higher current regulator]',
-        reason: 'Upgrade to regulator with higher current capability',
-        costImpact: 1
-      };
-    }
-  }
-
-  return null;  // No swap identified
-}
-
-function findComponentAddition(gap, concept) {
-  // Identify new component that could address the gap
-  const gapKeywords = (gap.description || gap.requirement || '').toLowerCase();
-
-  // Common addition patterns
-  if (gapKeywords.includes('5v') || gapKeywords.includes('boost')) {
-    return {
-      part: 'TPS61200 (Boost converter)',
-      purpose: 'Provide 5V output from lower voltage rail',
-      costImpact: 1.50
-    };
-  }
-
-  if (gapKeywords.includes('multiplexer') || gapKeywords.includes('mux')) {
-    return {
-      part: 'CD74HC4051 (Analog mux)',
-      purpose: 'Expand analog input channels',
-      costImpact: 0.80
-    };
-  }
-
-  if (gapKeywords.includes('level shift') || gapKeywords.includes('voltage translation')) {
-    return {
-      part: 'TXS0108E (Level shifter)',
-      purpose: 'Voltage level translation between logic domains',
-      costImpact: 1.20
-    };
-  }
-
-  if (gapKeywords.includes('esd') || gapKeywords.includes('protection')) {
-    return {
-      part: 'TPD4E05U06 (ESD protection)',
-      purpose: 'ESD protection for external interfaces',
-      costImpact: 0.50
-    };
-  }
-
-  return null;  // No addition identified
-}
-
-function findArchitectureTweak(gap, concept) {
-  // Assess if architecture change addresses gap
-  const gapKeywords = (gap.description || gap.requirement || '').toLowerCase();
-
-  // Common architecture tweaks
-  if (gapKeywords.includes('redundan') || gapKeywords.includes('backup')) {
-    return {
-      description: 'Add redundant power path with automatic failover',
-      impact: 'Improves reliability but adds complexity',
-      costImpact: 3,
-      complexity: 'high'
-    };
-  }
-
-  if (gapKeywords.includes('isolat')) {
-    return {
-      description: 'Add galvanic isolation on critical interfaces',
-      impact: 'Improves safety and noise immunity',
-      costImpact: 5,
-      complexity: 'medium'
-    };
-  }
-
-  if (gapKeywords.includes('distribut') || gapKeywords.includes('modular')) {
-    return {
-      description: 'Split into modular subsystems with defined interfaces',
-      impact: 'Improves maintainability and testability',
-      costImpact: 2,
-      complexity: 'high'
-    };
-  }
-
-  return null;  // No tweak identified
-}
-```
+**architecture_tweak** (complexity varies): Match gap keywords to structural changes:
+- `redundan` or `backup` → redundant power path with failover (complexity: high, ~$3)
+- `isolat` → galvanic isolation on critical interfaces (complexity: medium, ~$5)
+- `distribut` or `modular` → split into modular subsystems (complexity: high, ~$2)
 
 ---
 
@@ -6188,21 +3305,7 @@ function findArchitectureTweak(gap, concept) {
 
 **Priority order (per CONTEXT.md):** low complexity > low cost > simple change
 
-```javascript
-function selectBestClosureAction(options) {
-  // Sort by: complexity (low first), then cost (low first)
-  const complexityOrder = { low: 0, medium: 1, high: 2 };
-
-  return options.sort((a, b) => {
-    // Primary: Complexity (low is better)
-    const complexityDiff = complexityOrder[a.complexity] - complexityOrder[b.complexity];
-    if (complexityDiff !== 0) return complexityDiff;
-
-    // Secondary: Cost (lower is better)
-    return a.cost - b.cost;
-  })[0];
-}
-```
+Sort options by complexity first (low < medium < high), then by cost (lower is better). Return the first result.
 
 ---
 
@@ -6210,93 +3313,13 @@ function selectBestClosureAction(options) {
 
 **Purpose:** Apply the selected closure action to the concept.
 
-```javascript
-function applyClosureAction(concept, action) {
-  switch (action.type) {
-    case 'component_swap':
-      // Replace part in BOM
-      const bomIndex = concept.bom.findIndex(p => p.mpn === action.original);
-      if (bomIndex >= 0) {
-        concept.bom[bomIndex].mpn = action.replacement;
-        concept.bom[bomIndex].note = `Swapped from ${action.original}: ${action.reason}`;
-      }
-      // Update concept cost estimate
-      concept.bomCost += action.cost;
-      break;
-
-    case 'component_addition':
-      // Add part to BOM
-      concept.bom.push({
-        mpn: action.newPart,
-        category: 'Added',
-        description: action.purpose,
-        quantity: 1,
-        estimatedPrice: action.cost,
-        note: `Added to address gap: ${action.gap}`
-      });
-      concept.bomCost += action.cost;
-      break;
-
-    case 'architecture_tweak':
-      // Document change in concept notes
-      concept.architectureNotes = concept.architectureNotes || [];
-      concept.architectureNotes.push({
-        change: action.change,
-        impact: action.impact,
-        gap: action.gap
-      });
-      concept.bomCost += action.cost;
-      break;
-
-    case 'requirement_reinterpretation':
-      // Log suggestion for user (do not auto-apply)
-      concept.userSuggestions = concept.userSuggestions || [];
-      concept.userSuggestions.push({
-        requirement: action.requirement,
-        suggestion: action.suggestion,
-        message: action.message
-      });
-      break;
-
-    case 'skip':
-      // Already logged in actions, no concept modification needed
-      break;
-  }
-
-  // Mark gap as addressed (or suggested)
-  concept.addressedGaps = concept.addressedGaps || [];
-  concept.addressedGaps.push({
-    gap: action.gap || action.gaps,
-    action: action.type,
-    cost: action.cost
-  });
-
-  return concept;
-}
-```
-
-**Closure Action Format:**
-```javascript
-{
-  type: 'component_swap' | 'component_addition' | 'architecture_tweak' | 'requirement_reinterpretation',
-  gap: string,  // Gap ID/description
-  // For swap:
-  original: string,
-  replacement: string,
-  // For addition:
-  newPart: string,
-  purpose: string,
-  // For tweak:
-  change: string,
-  impact: string,
-  // For reinterpretation:
-  message: string,
-  suggestion: string,
-  // Common:
-  cost: number,  // Cost impact
-  complexity: 'low' | 'medium' | 'high'
-}
-```
+Apply the selected action to the concept in-memory:
+- `component_swap`: Find part by original MPN in BOM; replace MPN and add note "Swapped from {original}: {reason}"; add cost impact to BOM total.
+- `component_addition`: Push new part entry to BOM (category: "Added", description: purpose, qty: 1); add cost impact.
+- `architecture_tweak`: Append to concept's architecture notes (change, impact, gap reference); add cost impact.
+- `requirement_reinterpretation`: Log suggestion to user suggestions list (do not modify BOM).
+- `skip`: No modification needed.
+- After applying: record gap as addressed in `addressedGaps` list with action type and cost.
 
 **Gap Closure Display Format:**
 ```markdown
@@ -6353,11 +3376,9 @@ function applyClosureAction(concept, action) {
 
 **Update state file** `.librespin/state.md` — set `phase` to `6-self-critique`:
 
-```javascript
-const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
-const updatedState = existingState.replace(/^phase: .+$/m, `phase: '6-self-critique'`);
-fs.writeFileSync('.librespin/state.md', updatedState);
-```
+- Read `.librespin/state.md`.
+- Replace the `phase: ...` frontmatter field value with `'6-self-critique'`.
+- Write the updated content back to `.librespin/state.md`.
 
 ## PHASE 7: FINAL OUTPUT
 
@@ -6369,682 +3390,174 @@ Generate final deliverables: comparison matrix, recommendation, and per-concept 
 
 Load data from Phases 6, 7, and 8 for final presentation.
 
-```javascript
-// Discover concept names from Phase 2 score files
-function discoverConceptsFromPhase6() {
-  const phase6Dir = '.librespin/06-refinement';
-  const files = fs.readdirSync(phase6Dir).filter(f => f.startsWith('score-') && f.endsWith('.md'));
+**Discover concepts from Phase 6:**
+- List all files in `.librespin/06-refinement/` matching `score-*.md`.
+- Extract concept name from each file's `# Quality Score: {name}` header.
+- Fallback: convert slug (filename minus `score-` prefix and `.md`) to title case.
 
-  // Extract concept names from filenames: score-{concept-slug}.md -> concept-slug
-  const conceptSlugs = files.map(f => f.replace(/^score-/, '').replace(/\.md$/, ''));
-
-  // Convert slugs back to readable names by reading each file's header
-  const conceptNames = [];
-  for (const slug of conceptSlugs) {
-    const filePath = `${phase6Dir}/score-${slug}.md`;
-    const content = fs.readFileSync(filePath, 'utf-8');
-    // Extract name from "# Quality Score: [Concept Name]" header
-    const nameMatch = content.match(/^# Quality Score: (.+)$/m);
-    if (nameMatch) {
-      conceptNames.push(nameMatch[1]);
-    } else {
-      // Fallback: convert slug to title case
-      conceptNames.push(slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
-    }
-  }
-
-  return conceptNames;
-}
-
-// Load all Phase 2 outputs for final presentation
-function loadPhase6Outputs(conceptNames) {
-  const concepts = [];
-
-  for (const name of conceptNames) {
-    const conceptSlug = name.toLowerCase().replace(/\s+/g, '-');
-
-    // Load quality scores from Phase 2
-    const scoreFile = `.librespin/06-refinement/score-${conceptSlug}.md`;
-    const qualityScore = parseScoreFile(scoreFile);
-
-    // Load refinement log from Phase 2
-    const refinementLog = `.librespin/06-refinement/refinement-log.md`;
-    const refinementActions = parseRefinementLog(refinementLog, name);
-
-    // Load block diagram and coverage from Phase 1
-    const analysisFile = `.librespin/05-detailed-designs/analysis-${conceptSlug}.md`;
-    const blockDiagram = extractBlockDiagram(analysisFile);
-    const coverageAnalysis = extractCoverageAnalysis(analysisFile);
-    const gaps = extractGaps(analysisFile);
-
-    // Load BOM from Phase 2 (may be updated in Phase 2)
-    const bomFile = `.librespin/04-bom/bom-${conceptSlug}.md`;
-    const bom = parseBom(bomFile);
-    const bomCost = calculateBomTotal(bom);
-    const datasheetLinks = extractDatasheetLinks(bom);
-
-    concepts.push({
-      name: name,
-      slug: conceptSlug,
-      qualityScore: qualityScore,
-      refinementActions: refinementActions,
-      blockDiagram: blockDiagram,
-      coverageAnalysis: coverageAnalysis,
-      coverageByTier: coverageAnalysis.byTier,
-      gaps: gaps,
-      bom: bom,
-      bomCost: bomCost,
-      datasheetLinks: datasheetLinks,
-      worstLeadTime: extractWorstLeadTime(bom)
-    });
-  }
-
-  return concepts;
-}
-
-// Parse quality score file from Phase 2
-function parseScoreFile(filePath) {
-  // Read score-{concept}.md
-  // Extract: overall score, breakdown by dimension
-  // Format:
-  // **Overall:** 85%
-  // **Breakdown:**
-  // - Coverage: 90%
-  // - Cost: 80%
-  // - Availability: 85%
-  // - Complexity: 75%
-
-  return {
-    overall: /* extracted overall percentage */,
-    breakdown: {
-      coverage: /* 60% weight */,
-      cost: /* 15% weight */,
-      availability: /* 15% weight */,
-      complexity: /* 10% weight */
-    }
-  };
-}
-
-// Extract worst-case lead time from BOM
-function extractWorstLeadTime(bom) {
-  let worstWeeks = 0;
-
-  for (const part of bom) {
-    if (part.leadTime) {
-      const weeks = parseLeadTimeToWeeks(part.leadTime);
-      if (weeks > worstWeeks) {
-        worstWeeks = weeks;
-      }
-    }
-  }
-
-  return worstWeeks > 0 ? worstWeeks : 'N/A';
-}
-
-function parseLeadTimeToWeeks(leadTimeStr) {
-  // Parse "4 weeks", "2 wk", "In Stock" -> number
-  if (leadTimeStr.toLowerCase().includes('stock')) return 0;
-  const match = leadTimeStr.match(/(\d+)\s*w/i);
-  return match ? parseInt(match[1]) : 0;
-}
-```
+**Load per-concept data:**
+- Quality score: parse `**Overall:**` and breakdown dimensions from `.librespin/06-refinement/score-{slug}.md`.
+- Block diagram, coverage analysis, gaps: extract from `.librespin/05-detailed-designs/analysis-{slug}.md`.
+- BOM: parse table from `.librespin/04-bom/bom-{slug}.md`; sum unit prices for `bomCost`.
+- Worst lead time: scan BOM for highest lead time value; parse "N weeks"/"N wk" patterns; "In Stock" = 0. Return `N/A` if no lead time data.
+- Assemble per-concept record: `{name, slug, qualityScore, blockDiagram, coverageAnalysis, coverageByTier, gaps, bom, bomCost, worstLeadTime}`.
 
 ### CONCEPT SELECTION
 
 Select top 3 concepts for final presentation.
 
-```javascript
-// Select top 3 concepts by quality score
-function selectTop3Concepts(concepts) {
-  // Sort by composite quality score (descending)
-  const sorted = concepts.sort((a, b) =>
-    b.qualityScore.overall - a.qualityScore.overall
-  );
-
-  // Filter to concepts that passed 80% threshold
-  const passing = sorted.filter(c => c.qualityScore.overall >= 80);
-
-  if (passing.length >= 3) {
-    // Normal case: take top 3 passing concepts
-    return passing.slice(0, 3);
-  }
-
-  if (passing.length > 0) {
-    // Partial case: include best available with warning
-    console.warn(`WARNING: Only ${passing.length} concepts passed 80% threshold`);
-    const selected = [...passing];
-
-    // Add best non-passing concepts to reach 3 (if available)
-    const notPassing = sorted.filter(c => c.qualityScore.overall < 80);
-    for (const concept of notPassing) {
-      if (selected.length >= 3) break;
-      concept.warning = `Below threshold (${concept.qualityScore.overall}%)`;
-      selected.push(concept);
-    }
-
-    return selected;
-  }
-
-  // No concepts passed - return best 3 with warnings
-  console.warn('WARNING: No concepts passed 80% threshold');
-  return sorted.slice(0, 3).map(c => ({
-    ...c,
-    warning: `Below threshold (${c.qualityScore.overall}%)`
-  }));
-}
-```
+- Sort all concepts by quality score (descending).
+- If ≥3 concepts passed (≥80%): return top 3 passing concepts.
+- If 1–2 passed: warn "Only {N} concepts passed 80% threshold"; include all passing plus enough non-passing (with `warning: "Below threshold ({X}%)"`) to reach 3 total.
+- If none passed: warn; return top 3 with `warning` field set on each.
 
 ### COMPARISON MATRIX
 
 Generate trade-off comparison matrix with relative ranking (<50 lines).
 
-```javascript
-// Generate comparison matrix with relative ranking
-// Output: markdown table under 50 lines per ROADMAP.md
-function generateComparisonMatrix(concepts) {
-  // Sort by quality score (highest first) for column order
-  const sorted = [...concepts].sort((a, b) =>
-    b.qualityScore.overall - a.qualityScore.overall
-  );
+Sort concepts by quality score (descending) for column order. Generate 8-row table (max 50 lines):
 
-  // Calculate relative rankings for each dimension
-  const rankings = {
-    bomCost: rankByValue(sorted, c => c.bomCost, 'asc'),         // lower = Best
-    complexity: rankByValue(sorted, c => c.qualityScore.breakdown.complexity, 'desc'), // higher = simpler = Best
-    risk: rankByValue(sorted, c => c.qualityScore.breakdown.availability, 'desc'),     // higher availability = lower risk = Best
-    leadTime: rankByValue(sorted, c => typeof c.worstLeadTime === 'number' ? c.worstLeadTime : 99, 'asc') // lower = Best
-  };
+| Dimension | Values |
+|-----------|--------|
+| BOM Cost | Absolute `$X.XX (Best\|Mid\|Worst)` — lower = Best |
+| Complexity | Relative rank — higher complexity score (simpler design) = Best |
+| Supply Risk | Relative rank based on availability score — higher = lower risk = Best |
+| Coverage | Absolute percentages |
+| Lead Time | Absolute worst-case weeks (`N/A` if unknown) — lower = Best |
+| Components | BOM line count |
+| Quality Score | Absolute overall score % |
+| Best For | Dominant strength: coverage ≥90% → "Max Features"; cost ≥85% → "Budget"; availability ≥90% → "Availability"; complexity ≥85% → "Simplicity"; else → "Balanced" |
 
-  // Build markdown table (8 rows max per CONTEXT.md)
-  let md = `# Comparison Matrix\n\n`;
-  md += `| Dimension | ${sorted.map(c => c.name).join(' | ')} |\n`;
-  md += `|-----------|${sorted.map(() => ':--------:').join('|')}|\n`;
-
-  // Row 1: BOM Cost (absolute values + ranking)
-  md += `| BOM Cost | ${sorted.map((c, i) => `$${c.bomCost.toFixed(2)} (${rankings.bomCost[i]})`).join(' | ')} |\n`;
-
-  // Row 2: Complexity (relative ranking)
-  md += `| Complexity | ${rankings.complexity.join(' | ')} |\n`;
-
-  // Row 3: Supply Risk (relative ranking based on availability score)
-  md += `| Supply Risk | ${rankings.risk.join(' | ')} |\n`;
-
-  // Row 4: Coverage (absolute percentages)
-  md += `| Coverage | ${sorted.map(c => `${c.qualityScore.breakdown.coverage}%`).join(' | ')} |\n`;
-
-  // Row 5: Lead Time (absolute values)
-  md += `| Lead Time | ${sorted.map(c => typeof c.worstLeadTime === 'number' ? `${c.worstLeadTime} wk` : 'N/A').join(' | ')} |\n`;
-
-  // Row 6: Component Count
-  md += `| Components | ${sorted.map(c => c.bom.length.toString()).join(' | ')} |\n`;
-
-  // Row 7: Quality Score (absolute)
-  md += `| Quality Score | ${sorted.map(c => `${c.qualityScore.overall}%`).join(' | ')} |\n`;
-
-  // Row 8: Best For (qualitative summary)
-  md += `| Best For | ${sorted.map(c => determineBestFor(c)).join(' | ')} |\n`;
-
-  return md;
-}
-
-// Rank concepts by a value (returns array of 'Best'/'Mid'/'Worst' strings)
-// Handles ties by assigning same rank
-function rankByValue(concepts, getValue, order) {
-  const values = concepts.map(getValue);
-
-  // Sort values to determine ranks
-  const sortedValues = [...values].sort((a, b) =>
-    order === 'asc' ? a - b : b - a
-  );
-
-  // Assign ranks handling ties
-  return values.map(v => {
-    const position = sortedValues.indexOf(v);
-    const reversePosition = sortedValues.length - 1 - sortedValues.lastIndexOf(v);
-
-    // If first position (best)
-    if (position === 0) return 'Best';
-
-    // If last position (worst)
-    if (reversePosition === 0) return 'Worst';
-
-    // Otherwise middle
-    return 'Mid';
-  });
-}
-
-// Determine "Best For" summary based on concept strengths
-function determineBestFor(concept) {
-  const score = concept.qualityScore;
-
-  // Check for dominant strength
-  if (score.breakdown.coverage >= 90) return 'Max Features';
-  if (score.breakdown.cost >= 85) return 'Budget';
-  if (score.breakdown.availability >= 90) return 'Availability';
-  if (score.breakdown.complexity >= 85) return 'Simplicity';
-
-  // Default to balanced
-  return 'Balanced';
-}
-```
+Relative ranking assigns `Best` (first position), `Worst` (last position), or `Mid` (all others). Handle ties by assigning the same rank.
 
 ### RECOMMENDATION
 
 Generate directive recommendation with rationale and runner-up.
 
-```javascript
-// Generate recommendation section
-// Per CONTEXT.md: directive tone, brief rationale, trade-off, runner-up
-function generateRecommendation(concepts) {
-  // Sort by quality score
-  const sorted = [...concepts].sort((a, b) =>
-    b.qualityScore.overall - a.qualityScore.overall
-  );
+**Select recommended concept:**
+- Sort by quality score (descending); default to rank-1.
+- If top 2 scores are within 5 points AND rank-2 has a higher complexity score (simpler design): prefer rank-2 as recommended.
 
-  let recommended = sorted[0];
-  const runnerUp = sorted[1];
+**Top strength** (first match wins):
+- coverage ≥ 90% → "highest coverage. It addresses {X}% of requirements including all Critical items."
+- BOM cost within 10% of minimum → "lowest cost. At ${X}, it offers the best value while meeting requirements."
+- availability ≥ 90% → "best component availability. All parts are readily available with minimal supply chain risk."
+- default → "balanced trade-offs. It provides the best combination of cost, coverage, and complexity."
 
-  // If scores within 5%, favor simpler (lower complexity = higher complexity score)
-  if (sorted.length >= 2) {
-    const scoreDiff = sorted[0].qualityScore.overall - sorted[1].qualityScore.overall;
-    if (scoreDiff <= 5) {
-      // Favor concept with higher complexity score (simpler design)
-      if (sorted[1].qualityScore.breakdown.complexity > sorted[0].qualityScore.breakdown.complexity) {
-        recommended = sorted[1];
-      }
-    }
-  }
+**Main trade-off** (first match wins, or omit if none):
+- BOM cost >20% above cheapest alternative → "higher BOM cost (${X} vs ${Y}), the additional investment provides better coverage and reliability"
+- Coverage >5 points below best alternative → "slightly lower coverage, it compensates with better cost and availability"
+- Availability >10 points below best alternative → "some supply chain considerations, all critical components remain available through major distributors"
 
-  // Build rationale
-  const strength = findTopStrength(recommended, sorted);
-  const tradeoff = findMainTradeoff(recommended, sorted);
-  const runnerUpReason = findRunnerUpReason(runnerUp, recommended);
+**Runner-up reason** (first match wins):
+- Runner-up costs <85% of recommended → "budget is the primary constraint"
+- Runner-up availability score higher → "component availability and lead times are critical"
+- Runner-up coverage score higher → "maximum feature coverage is essential"
+- Runner-up complexity score higher → "development simplicity is prioritized"
+- Default → "different trade-offs better match your priorities"
 
-  let md = `\n## Recommendation\n\n`;
-  md += `**Recommended: ${recommended.name}**\n\n`;
+**Output format:**
+```
+## Recommendation
 
-  // Directive tone: "Recommend X because..."
-  md += `Recommend ${recommended.name} for its ${strength.description}. `;
-  md += `${strength.detail}\n\n`;
+**Recommended: {name}**
 
-  // Trade-off acknowledgment
-  if (tradeoff) {
-    md += `Though it has ${tradeoff.description}, ${tradeoff.mitigation}.\n\n`;
-  }
+Recommend {name} for its {strength}. {detail}
 
-  // Runner-up
-  if (runnerUp) {
-    md += `**Runner-up:** Consider ${runnerUp.name} if ${runnerUpReason}.\n`;
-  }
+Though it has {tradeoff}, {mitigation}.
 
-  return md;
-}
-
-// Find the top strength of the recommended concept
-function findTopStrength(recommended, allConcepts) {
-  const score = recommended.qualityScore;
-
-  // Check if highest coverage
-  if (score.breakdown.coverage >= 90) {
-    return {
-      description: 'highest coverage',
-      detail: `It addresses ${score.breakdown.coverage}% of requirements including all Critical items.`
-    };
-  }
-
-  // Check if lowest cost (within 10% of minimum)
-  const costs = allConcepts.map(c => c.bomCost);
-  const minCost = Math.min(...costs);
-  if (recommended.bomCost <= minCost * 1.1) {
-    return {
-      description: 'lowest cost',
-      detail: `At $${recommended.bomCost.toFixed(2)}, it offers the best value while meeting requirements.`
-    };
-  }
-
-  // Check if best availability
-  if (score.breakdown.availability >= 90) {
-    return {
-      description: 'best component availability',
-      detail: `All parts are readily available with minimal supply chain risk.`
-    };
-  }
-
-  // Default to balanced trade-offs
-  return {
-    description: 'balanced trade-offs',
-    detail: 'It provides the best combination of cost, coverage, and complexity.'
-  };
-}
-
-// Find the main trade-off of the recommended concept
-function findMainTradeoff(recommended, allConcepts) {
-  // Compare recommended to others
-  const others = allConcepts.filter(c => c !== recommended);
-  if (others.length === 0) return null;
-
-  // Find where recommended is weakest relative to others
-  const minOtherCost = Math.min(...others.map(c => c.bomCost));
-  const maxOtherCoverage = Math.max(...others.map(c => c.qualityScore.breakdown.coverage));
-  const maxOtherAvailability = Math.max(...others.map(c => c.qualityScore.breakdown.availability));
-
-  // Check if cost is notably higher
-  if (recommended.bomCost > minOtherCost * 1.2) {
-    return {
-      description: `higher BOM cost ($${recommended.bomCost.toFixed(2)} vs $${minOtherCost.toFixed(2)})`,
-      mitigation: 'the additional investment provides better coverage and reliability'
-    };
-  }
-
-  // Check if coverage is lower
-  if (recommended.qualityScore.breakdown.coverage < maxOtherCoverage - 5) {
-    return {
-      description: 'slightly lower coverage',
-      mitigation: 'it compensates with better cost and availability'
-    };
-  }
-
-  // Check if availability is worse
-  if (recommended.qualityScore.breakdown.availability < maxOtherAvailability - 10) {
-    return {
-      description: 'some supply chain considerations',
-      mitigation: 'all critical components remain available through major distributors'
-    };
-  }
-
-  return null; // No notable trade-off
-}
-
-// Find reason to consider the runner-up
-function findRunnerUpReason(runnerUp, recommended) {
-  if (!runnerUp) return 'no alternatives available';
-
-  // Find runner-up's strength relative to recommended
-  if (runnerUp.bomCost < recommended.bomCost * 0.85) {
-    return 'budget is the primary constraint';
-  }
-
-  if (runnerUp.qualityScore.breakdown.availability > recommended.qualityScore.breakdown.availability) {
-    return 'component availability and lead times are critical';
-  }
-
-  if (runnerUp.qualityScore.breakdown.coverage > recommended.qualityScore.breakdown.coverage) {
-    return 'maximum feature coverage is essential';
-  }
-
-  if (runnerUp.qualityScore.breakdown.complexity > recommended.qualityScore.breakdown.complexity) {
-    return 'development simplicity is prioritized';
-  }
-
-  return 'different trade-offs better match your priorities';
-}
+**Runner-up:** Consider {runner-up name} if {reason}.
 ```
 
 ### CONCEPT FOLDER GENERATION
 
 Create single README.md per concept with inline BOM, diagram, coverage, and references.
 
-```javascript
-// Generate concept README with all content inline
-// Per CONTEXT.md: single file with block diagram, BOM, coverage, references
-function generateConceptReadme(concept) {
-  let md = `# Concept: ${concept.name}\n\n`;
+Generate `{outputDir}/{slug}/README.md` with this structure:
 
-  // Summary stats at top
-  md += `**Quality Score:** ${concept.qualityScore.overall}%\n`;
-  md += `**BOM Cost:** $${concept.bomCost.toFixed(2)}\n`;
-  md += `**Coverage:** ${concept.qualityScore.breakdown.coverage}%`;
-  if (concept.coverageByTier) {
-    md += ` (Critical: ${concept.coverageByTier.Critical || 0}%, `;
-    md += `Important: ${concept.coverageByTier.Important || 0}%, `;
-    md += `Nice-to-have: ${concept.coverageByTier['Nice-to-have'] || 0}%)`;
-  }
-  md += `\n\n`;
+```markdown
+# Concept: {name}
 
-  // Warning if below threshold
-  if (concept.warning) {
-    md += `> **Warning:** ${concept.warning}\n\n`;
-  }
+**Quality Score:** {X}%
+**BOM Cost:** ${X.XX}
+**Coverage:** {X}% (Critical: {X}%, Important: {X}%, Nice-to-have: {X}%)
 
-  // Architecture section with inline block diagram
-  md += `## Architecture\n\n`;
-  md += '```\n';
-  md += concept.blockDiagram || '(Block diagram not available)';
-  md += '\n```\n\n';
+> **Warning:** {warning text}   ← only if concept is below threshold
 
-  // Bill of Materials section
-  md += `## Bill of Materials\n\n`;
-  md += generateBomTable(concept.bom);
-  md += `\n**Total:** $${concept.bomCost.toFixed(2)}\n\n`;
+## Architecture
 
-  // Coverage Analysis section
-  md += `## Coverage Analysis\n\n`;
-  md += generateCoverageTable(concept);
-
-  // Gaps section
-  md += `\n### Gaps\n\n`;
-  if (concept.gaps && concept.gaps.length > 0) {
-    for (const gap of concept.gaps) {
-      md += `- **${gap.id} (${gap.priority}):** ${gap.description}\n`;
-    }
-  } else {
-    md += `- None - all requirements addressed\n`;
-  }
-  md += '\n';
-
-  // References section (vendor app notes only: TI, ADI, ST)
-  md += `## References\n\n`;
-  const references = findVendorReferences(concept);
-  if (references.length > 0) {
-    for (const ref of references) {
-      md += `- [${ref.title}](${ref.url}) - ${ref.description}\n`;
-    }
-  } else {
-    md += `- No vendor reference designs applicable\n`;
-  }
-
-  return md;
-}
-
-// Generate BOM table with datasheet links inline
-function generateBomTable(bom) {
-  let md = '| Ref | Part | MPN | Manufacturer | Description | Qty | Price | Datasheet |\n';
-  md += '|-----|------|-----|--------------|-------------|-----|-------|----------|\n';
-
-  for (const part of bom) {
-    const datasheet = part.datasheetUrl
-      ? `[Link](${part.datasheetUrl})`
-      : '-';
-    const manufacturer = part.manufacturer || '-';
-    const mpn = part.mpn || 'Generic';
-
-    md += `| ${part.ref} | ${part.category || part.part} | ${mpn} | ${manufacturer} | ${part.description} | ${part.qty} | $${part.unitPrice.toFixed(2)} | ${datasheet} |\n`;
-  }
-
-  return md;
-}
-
-// Generate coverage analysis table
-function generateCoverageTable(concept) {
-  let md = '| Priority | Total | Covered | Coverage |\n';
-  md += '|----------|-------|---------|----------|\n';
-
-  const tiers = ['Critical', 'Important', 'Nice-to-have'];
-  for (const tier of tiers) {
-    const total = concept.coverageAnalysis?.reqCounts?.[tier] || 0;
-    const covered = concept.coverageAnalysis?.coveredCounts?.[tier] || 0;
-    const coverage = concept.coverageByTier?.[tier] || 0;
-    md += `| ${tier} | ${total} | ${covered} | ${coverage}% |\n`;
-  }
-
-  return md;
-}
-
-// Find vendor reference designs (TI, ADI, ST only per CONTEXT.md)
-function findVendorReferences(concept) {
-  const references = [];
-  const keyComponents = concept.bom.filter(p =>
-    ['MCU', 'Regulator', 'Sensor', 'Wireless', 'Motor Driver', 'Power'].some(
-      cat => (p.category || '').includes(cat) || (p.description || '').includes(cat)
-    )
-  );
-
-  for (const part of keyComponents) {
-    const mfr = (part.manufacturer || '').toLowerCase();
-
-    // TI reference designs
-    if (mfr.includes('texas') || mfr.includes('ti ') || mfr === 'ti') {
-      references.push({
-        title: `TI ${part.mpn} Reference Design`,
-        url: `https://www.ti.com/product/${part.mpn}#design-development`,
-        description: `Reference designs for ${part.description}`
-      });
-    }
-
-    // ST reference designs
-    if (mfr.includes('stm') || mfr.includes('st ') || mfr === 'st') {
-      references.push({
-        title: `ST ${part.mpn} Application Notes`,
-        url: `https://www.st.com/en/product/${part.mpn}#documentation`,
-        description: `Application notes for ${part.description}`
-      });
-    }
-
-    // ADI reference designs
-    if (mfr.includes('analog') || mfr.includes('adi') || mfr === 'adi') {
-      references.push({
-        title: `ADI ${part.mpn} Reference Circuit`,
-        url: `https://www.analog.com/en/products/${part.mpn}#design-resources`,
-        description: `Reference circuits for ${part.description}`
-      });
-    }
-  }
-
-  // Limit to 5 references per concept
-  return references.slice(0, 5);
-}
 ```
+{block diagram or "(Block diagram not available)"}
+```
+
+## Bill of Materials
+
+| Ref | Part | MPN | Manufacturer | Description | Qty | Price | Datasheet |
+...
+**Total:** ${X.XX}
+
+## Coverage Analysis
+
+| Priority | Total | Covered | Coverage |
+...
+
+### Gaps
+
+- **{id} ({priority}):** {description}
+- None - all requirements addressed   ← if no gaps
+
+## References
+
+- [{title}]({url}) - {description}   ← TI/ST/ADI only, max 5
+- No vendor reference designs applicable   ← if none found
+```
+
+**Vendor references:** Filter BOM for key components (MCU, Regulator, Sensor, Wireless, Motor Driver, Power). For each: TI (manufacturer contains "texas", "ti " or = "ti") → `https://www.ti.com/product/{mpn}#design-development`; ST (contains "stm", "st " or = "st") → `https://www.st.com/en/product/{mpn}#documentation`; ADI (contains "analog", "adi" or = "adi") → `https://www.analog.com/en/products/{mpn}#design-resources`. Limit to 5 references per concept.
 
 ### STATUS FILE GENERATION
 
 Generate status.md with summary and next steps (<30 lines).
 
-```javascript
-// Generate status file under 30 lines per ROADMAP.md
-function generateStatusFile(concepts, outputPath) {
-  const date = new Date().toISOString().split('T')[0];
-  const sorted = [...concepts].sort((a, b) =>
-    b.qualityScore.overall - a.qualityScore.overall
-  );
-  const recommended = sorted[0];
+Generate `.librespin/07-final-output/status.md` (target <30 lines):
 
-  let md = `# Status\n\n`;
-  md += `**Created:** ${date}\n`;
-  md += `**Recommended:** ${recommended.name}\n`;
-  md += `**Status:** Awaiting Selection\n\n`;
+```markdown
+# Status
 
-  md += `## Concepts\n\n`;
-  for (const c of sorted) {
-    md += `- **${c.name}:** ${c.qualityScore.overall}% quality, $${c.bomCost.toFixed(2)} BOM`;
-    if (c.warning) md += ` (${c.warning})`;
-    md += `\n`;
-  }
+**Created:** {YYYY-MM-DD}
+**Recommended:** {top concept name}
+**Status:** Awaiting Selection
 
-  md += `\n## Output Files\n\n`;
-  md += `- comparison-matrix.md\n`;
-  md += `- status.md\n`;
-  for (const c of sorted) {
-    md += `- ${c.slug}/README.md\n`;
-  }
+## Concepts
 
-  md += `\n## Next Steps\n\n`;
-  md += `1. Review comparison-matrix.md for trade-off analysis\n`;
-  md += `2. Select preferred concept\n`;
-  md += `3. Hand off selected concept folder to design engineer\n`;
+- **{name}:** {X}% quality, ${X.XX} BOM [{warning text}]
 
-  return md;
-}
+## Output Files
+
+- comparison-matrix.md
+- status.md
+- {slug}/README.md  (one per concept)
+
+## Next Steps
+
+1. Review comparison-matrix.md for trade-off analysis
+2. Select preferred concept
+3. Hand off selected concept folder to design engineer
 ```
 
 ### MAIN WORKFLOW
 
 Phase 1 orchestration bringing all pieces together.
 
-```javascript
-// Phase 1 main workflow
-async function executePhase9(conceptNames = null) {
-  const outputDir = '.librespin/07-final-output';
-
-  // Step 1: Discover or use provided concept names
-  if (!conceptNames || conceptNames.length === 0) {
-    conceptNames = discoverConceptsFromPhase6();
-    if (conceptNames.length === 0) {
-      throw new Error('No concepts found in Phase 2 output. Run Phase 2 first.');
-    }
-    console.log(`Discovered ${conceptNames.length} concept(s) from Phase 2: ${conceptNames.join(', ')}`);
-  }
-
-  // Step 2: Load Phase 2 outputs
-  const concepts = loadPhase6Outputs(conceptNames);
-
-  if (concepts.length === 0) {
-    throw new Error('No concepts available from Phase 2. Cannot generate output.');
-  }
-
-  // Step 2: Select top 3 concepts
-  const selectedConcepts = selectTop3Concepts(concepts);
-
-  // Step 3: Generate comparison matrix
-  const comparisonMatrix = generateComparisonMatrix(selectedConcepts);
-
-  // Step 4: Generate recommendation (appended to comparison matrix)
-  const recommendation = generateRecommendation(selectedConcepts);
-  const comparisonWithRec = comparisonMatrix + recommendation;
-
-  // Step 5: Create output directory structure
-  await createDirectory(outputDir);
-  for (const concept of selectedConcepts) {
-    await createDirectory(`${outputDir}/${concept.slug}`);
-  }
-
-  // Step 6: Generate concept folders with README.md each
-  for (const concept of selectedConcepts) {
-    const readme = generateConceptReadme(concept);
-    await writeFile(`${outputDir}/${concept.slug}/README.md`, readme);
-  }
-
-  // Step 7: Write comparison-matrix.md
-  await writeFile(`${outputDir}/comparison-matrix.md`, comparisonWithRec);
-
-  // Step 8: Write status.md
-  const statusFile = generateStatusFile(selectedConcepts, outputDir);
-  await writeFile(`${outputDir}/status.md`, statusFile);
-
-  // Step 9: Update librespin-concept-state.md
-  await updateState({
-    phase: 9,
-    status: 'complete',
-    outputFiles: [
-      `${outputDir}/comparison-matrix.md`,
-      `${outputDir}/status.md`,
-      ...selectedConcepts.map(c => `${outputDir}/${c.slug}/README.md`)
-    ],
-    recommendedConcept: selectedConcepts[0].name
-  });
-
-  return {
-    success: true,
-    concepts: selectedConcepts.length,
-    recommended: selectedConcepts[0].name,
-    outputDir: outputDir,
-    files: [
-      'comparison-matrix.md',
-      'status.md',
-      ...selectedConcepts.map(c => `${c.slug}/README.md`)
-    ]
-  };
-}
-```
+1. Discover concept names from `.librespin/06-refinement/` (or use names passed in). If none found: STOP "No concepts found in Phase 6 output. Run Phase 6 first."
+2. Load all Phase 6 outputs for each concept.
+3. If no concepts loaded: STOP "No concepts available. Cannot generate output."
+4. Select top 3 concepts by quality score.
+5. Generate comparison matrix (table + recommendation section appended).
+6. Create `.librespin/07-final-output/` and one subdirectory per concept.
+7. Write `{slug}/README.md` for each selected concept.
+8. Write `comparison-matrix.md` (matrix + recommendation).
+9. Write `status.md` (summary, concept list, output files, next steps).
+10. Update `.librespin/state.md` — set `phase` to `7-final-output`.
 
 ### OUTPUT DIRECTORY STRUCTURE
 
@@ -7064,21 +3577,16 @@ Final output organization per CONTEXT.md:
 
 ### ERROR HANDLING
 
-```javascript
-// Phase 1 error scenarios
-// - Missing Phase 2 files: STOP with error directing to run Phase 2 first
-// - No concepts passed validation: Include best available with warnings
-// - Missing BOM/diagram data: Generate partial README with placeholders
-// - Vendor reference search fails: Proceed without references section
-```
+- Missing Phase 6 files: STOP with error directing to run Phase 6 first.
+- No concepts passed validation: Include best available with `warning` field set.
+- Missing BOM/diagram data: Generate partial README with placeholder text.
+- Vendor reference search fails: Proceed without references section.
 
 **Update state file** `.librespin/state.md` — set `phase` to `7-final-output`:
 
-```javascript
-const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
-const updatedState = existingState.replace(/^phase: .+$/m, `phase: '7-final-output'`);
-fs.writeFileSync('.librespin/state.md', updatedState);
-```
+- Read `.librespin/state.md`.
+- Replace the `phase: ...` frontmatter field value with `'7-final-output'`.
+- Write the updated content back to `.librespin/state.md`.
 
 ## PHASE DISPATCH
 

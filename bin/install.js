@@ -47,6 +47,9 @@ async function install() {
     // Create target directories before copying
     const dirs = [
       'skills/concept',
+      'skills/calcpad',
+      'skills/simulate',
+      'skills/setup',
       'agents',
       'librespin/templates',
     ];
@@ -54,25 +57,50 @@ async function install() {
       await mkdir(join(targetBase, dir), { recursive: true });
     }
 
-    // Copy skill directory (recursive)
+    // Copy skill directories (recursive)
     await cp(
       join(sourceBase, 'skills', 'concept'),
       join(targetBase, 'skills', 'concept'),
       { recursive: true, force: true }
     );
-    console.log('  ✓ Skill installed');
+    await cp(
+      join(sourceBase, 'skills', 'calcpad'),
+      join(targetBase, 'skills', 'calcpad'),
+      { recursive: true, force: true }
+    );
+    await cp(
+      join(sourceBase, 'skills', 'simulate'),
+      join(targetBase, 'skills', 'simulate'),
+      { recursive: true, force: true }
+    );
+    await cp(
+      join(sourceBase, 'skills', 'setup'),
+      join(targetBase, 'skills', 'setup'),
+      { recursive: true, force: true }
+    );
+    console.log('  ✓ Skills installed (concept, calcpad, simulate, setup)');
 
-    // Copy agent flat file (not a directory)
+    // Copy agent flat files
     await cp(
       join(sourceBase, 'agents', 'concept.md'),
       join(targetBase, 'agents', 'concept.md'),
       { force: true }
     );
-    console.log('  ✓ Agent installed');
+    await cp(
+      join(sourceBase, 'agents', 'calcpad.md'),
+      join(targetBase, 'agents', 'calcpad.md'),
+      { force: true }
+    );
+    await cp(
+      join(sourceBase, 'agents', 'simulate.md'),
+      join(targetBase, 'agents', 'simulate.md'),
+      { force: true }
+    );
+    console.log('  ✓ Agents installed (concept, calcpad, simulate)');
 
     // Copy templates directory (recursive)
     await cp(
-      join(sourceBase, 'skills', 'librespin-concept', 'templates'),
+      join(sourceBase, 'skills', 'concept', 'templates'),
       join(targetBase, 'librespin', 'templates'),
       { recursive: true, force: true }
     );
@@ -81,7 +109,7 @@ async function install() {
     console.log(`\n✓ Installation complete!`);
     console.log(`\nFiles installed to: ${targetBase}`);
     if (!isLocal) {
-      console.log('\nRestart Claude Code to activate /librespin:concept skill.');
+      console.log('\nRestart Claude Code to activate /librespin:concept, /librespin:calcpad, /librespin:simulate, and /librespin:setup skills.');
     }
   } catch (err) {
     console.error('\n✗ Installation failed:', err.message);
@@ -91,7 +119,12 @@ async function install() {
 
 const INSTALL_ITEMS = [
   { path: join('skills', 'concept'), recursive: true },
+  { path: join('skills', 'calcpad'), recursive: true },
+  { path: join('skills', 'simulate'), recursive: true },
+  { path: join('skills', 'setup'), recursive: true },
   { path: join('agents', 'concept.md'), recursive: false },
+  { path: join('agents', 'calcpad.md'), recursive: false },
+  { path: join('agents', 'simulate.md'), recursive: false },
   { path: join('librespin', 'templates'), recursive: true },
 ];
 

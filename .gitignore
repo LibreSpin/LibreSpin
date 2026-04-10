@@ -17,3 +17,9 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# GSD executor worktrees (temporary, auto-cleaned — never commit)
+.claude/worktrees/
+
+# LibreSpin runtime output (generated per user project — not source)
+.librespin/
