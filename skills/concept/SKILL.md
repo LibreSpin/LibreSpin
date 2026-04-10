@@ -2959,14 +2959,13 @@ qualityScore = (coverage × 0.60) + (cost × 0.15) + (availability × 0.15) + (c
 ```
 
 **Weight Constants:**
-```javascript
-const weights = {
-  coverage: 0.60,    // 60% - Requirement coverage (from Phase 1)
-  cost: 0.15,        // 15% - Cost relative to other concepts
-  availability: 0.15, // 15% - Lead time + stock availability
-  complexity: 0.10   // 10% - Design complexity (BOM lines, interfaces, rails)
-};
-```
+
+| Dimension | Weight | Source |
+|-----------|--------|--------|
+| coverage | 0.60 (60%) | Requirement coverage from Phase 5 |
+| cost | 0.15 (15%) | Cost relative to other concepts |
+| availability | 0.15 (15%) | Lead time + stock availability |
+| complexity | 0.10 (10%) | Design complexity: BOM lines, interfaces, power rails |
 
 ---
 
@@ -2974,42 +2973,13 @@ const weights = {
 
 **Purpose:** Calculate composite weighted quality score for a concept.
 
-**Implementation:**
-```javascript
-function calculateQualityScore(concept, allConcepts) {
-  const weights = { coverage: 0.60, cost: 0.15, availability: 0.15, complexity: 0.10 };
-
-  // Coverage: Use Phase 1 weighted coverage (0-100%)
-  const coverageScore = concept.coverageScore; // Already calculated in Phase 1
-
-  // Cost: Relative scoring (cheapest = 100%, most expensive = 0%)
-  const costScore = calculateRelativeCost(concept, allConcepts);
-
-  // Availability: Combined lead time + stock (average of sub-scores)
-  const availabilityScore = calculateAvailabilityScore(concept);
-
-  // Complexity: Multi-factor assessment
-  const complexityScore = calculateComplexityScore(concept);
-
-  // Composite weighted score
-  const qualityScore =
-    (coverageScore * weights.coverage) +
-    (costScore * weights.cost) +
-    (availabilityScore * weights.availability) +
-    (complexityScore * weights.complexity);
-
-  return {
-    overall: Math.round(qualityScore),
-    breakdown: {
-      coverage: Math.round(coverageScore),
-      cost: Math.round(costScore),
-      availability: Math.round(availabilityScore),
-      complexity: Math.round(complexityScore)
-    },
-    weights: weights
-  };
-}
-```
+**Steps:**
+- Use Phase 5 weighted coverage score (0–100%) as `coverageScore`.
+- Calculate `costScore` via relative cost scoring (cheapest = 100%, most expensive = 0%).
+- Calculate `availabilityScore` as average of lead-time score and stock score for key components.
+- Calculate `complexityScore` as weighted average of BOM count, interface diversity, power rail count, and topology.
+- Compute: `overall = round((coverageScore × 0.60) + (costScore × 0.15) + (availabilityScore × 0.15) + (complexityScore × 0.10))`.
+- Return `overall` and `breakdown` (each dimension score, rounded).
 
 ---
 
@@ -3017,31 +2987,10 @@ function calculateQualityScore(concept, allConcepts) {
 
 **Purpose:** Score concepts relative to each other (cheapest = 100%, most expensive = 0%).
 
-**Implementation:**
-```javascript
-function calculateRelativeCost(concept, allConcepts) {
-  // Get all BOM costs
-  const costs = allConcepts.map(c => c.bomCost);
-  const minCost = Math.min(...costs);
-  const maxCost = Math.max(...costs);
-
-  // Handle edge case: all same cost OR single concept
-  if (minCost === maxCost) {
-    return 100; // All concepts equally good on cost
-  }
-
-  // Linear interpolation: cheapest = 100%, most expensive = 0%
-  const costScore = 100 * (1 - (concept.bomCost - minCost) / (maxCost - minCost));
-
-  return Math.round(costScore);
-}
-
-// Example:
-// Concepts: A=$25, B=$50, C=$100
-// A: 100 * (1 - (25-25)/(100-25)) = 100%
-// B: 100 * (1 - (50-25)/(100-25)) = 67%
-// C: 100 * (1 - (100-25)/(100-25)) = 0%
-```
+- Get `minCost` and `maxCost` from all concepts' BOM totals.
+- If all costs are equal (or single concept): return 100 (no cost differentiation).
+- Otherwise: `costScore = round(100 × (1 − (concept.bomCost − minCost) / (maxCost − minCost)))`.
+- Example: A=$25, B=$50, C=$100 → A=100%, B=67%, C=0%.
 
 ---
 
@@ -3049,52 +2998,15 @@ function calculateRelativeCost(concept, allConcepts) {
 
 **Purpose:** Calculate combined lead time + stock availability score for key components.
 
-**Key Component Filter:**
-```javascript
-function isKeyComponent(part) {
-  const keyCategories = ['MCU', 'Microcontroller', 'Regulator', 'Connector', 'Wireless', 'Sensor'];
-  return keyCategories.some(cat =>
-    part.category?.includes(cat) || part.description?.includes(cat)
-  );
-}
-```
+**Key Component Filter:** A part is "key" if its category or description contains any of: `MCU`, `Microcontroller`, `Regulator`, `Connector`, `Wireless`, `Sensor`. Skip passives (resistors, capacitors).
 
-**Implementation:**
-```javascript
-function calculateAvailabilityScore(concept) {
-  let totalLeadTimeScore = 0;
-  let totalStockScore = 0;
-  let keyComponentCount = 0;
+For each key component:
+- Lead time score: `max(0, 100 − (leadTimeWeeks × 12.5))` — in stock (0 weeks) = 100%; ≥8 weeks = 0%.
+- Stock score: `min(100, stockQuantity / 10)` — 1000+ units = 100%; 0 units = 0%.
 
-  // Only score key components (MCU, regulators, connectors)
-  // Skip passives (resistors, capacitors)
-  concept.bom
-    .filter(part => isKeyComponent(part))
-    .forEach(part => {
-      // Lead time score (0-100%)
-      // In stock (0 weeks) = 100%, 8+ weeks = 0%, linear interpolation
-      const leadTimeScore = Math.max(0, 100 - (part.leadTimeWeeks * 12.5));
+Availability score = `round((avgLeadTime + avgStock) / 2)` across all key components.
 
-      // Stock score (0-100%)
-      // 1000+ units = 100%, 0 units = 0%, linear interpolation
-      const stockScore = Math.min(100, part.stockQuantity / 10);
-
-      totalLeadTimeScore += leadTimeScore;
-      totalStockScore += stockScore;
-      keyComponentCount++;
-    });
-
-  // Handle no-key-components edge case
-  if (keyComponentCount === 0) return 100; // No key components = no sourcing risk
-
-  // Average of lead time and stock scores
-  const avgLeadTime = totalLeadTimeScore / keyComponentCount;
-  const avgStock = totalStockScore / keyComponentCount;
-
-  // Combined score (average of both sub-scores)
-  return Math.round((avgLeadTime + avgStock) / 2);
-}
-```
+If no key components found: return 100 (no sourcing risk).
 
 ---
 
@@ -3117,44 +3029,9 @@ function calculateAvailabilityScore(concept) {
 - Power rails: 25%
 - Topology: 20%
 
-**Implementation:**
-```javascript
-function calculateComplexityScore(concept) {
-  // BOM line count
-  const bomLines = concept.bom.length;
-  const bomScore = bomLines <= 15 ? 100 :
-                   bomLines <= 25 ? 85 :
-                   bomLines <= 40 ? 70 :
-                   bomLines <= 60 ? 50 : 30;
-
-  // Interface diversity (count unique interface types)
-  const interfaces = new Set(concept.interfaces || []);
-  const interfaceScore = interfaces.size <= 3 ? 100 :
-                         interfaces.size <= 5 ? 80 :
-                         interfaces.size <= 8 ? 60 : 40;
-
-  // Power rail count
-  const railCount = concept.powerRails?.length || 1;
-  const railScore = railCount <= 2 ? 100 :
-                    railCount <= 4 ? 75 :
-                    railCount <= 6 ? 50 : 25;
-
-  // Topology complexity (qualitative assessment)
-  // Simple: linear, single MCU
-  // Moderate: multiple subsystems or complex routing
-  // Complex: distributed, mesh, custom protocols
-  const topologyScore = concept.topologyComplexity === 'simple' ? 100 :
-                        concept.topologyComplexity === 'moderate' ? 65 : 30;
-
-  // Weighted average (30/25/25/20)
-  return Math.round(
-    (bomScore * 0.30) +
-    (interfaceScore * 0.25) +
-    (railScore * 0.25) +
-    (topologyScore * 0.20)
-  );
-}
-```
+- Score each factor using the tiers above, then compute: `round((bomScore × 0.30) + (interfaceScore × 0.25) + (railScore × 0.25) + (topologyScore × 0.20))`.
+- Topology: simple = linear/single MCU (100%); moderate = multiple subsystems/complex routing (65%); complex = distributed/mesh/custom protocols (30%).
+- Default power rail count to 1 if not specified.
 
 ---
 
@@ -3184,37 +3061,10 @@ function calculateComplexityScore(concept) {
 
 **Purpose:** Load and validate iteration_limit from config with default fallback.
 
-**Implementation:**
-```javascript
-function loadIterationConfig() {
-  // Read librespin-concept-config.yaml
-  const configPath = '.librespin/config.yaml';
-  const config = readYAML(configPath);
-
-  // Check for iteration_limit field
-  if (config.iteration_limit === undefined) {
-    // Create field with default value 5
-    config.iteration_limit = 5;
-    writeYAML(configPath, config);
-    return 5;
-  }
-
-  // Validate it's a number between 1-10
-  const limit = config.iteration_limit;
-  if (typeof limit !== 'number' || limit < 1 || limit > 10) {
-    // STOP with error message (per CLAUDE.md error handling)
-    throw new Error(
-      `Invalid iteration_limit: ${limit}. ` +
-      `Must be a number between 1 and 10. ` +
-      `Check .librespin/config.yaml`
-    );
-  }
-
-  return limit;
-}
-```
-
-**Default:** 5 iterations (configurable 1-10).
+- Read `iteration_limit` from `.librespin/config.yaml`.
+- If field is absent: write default value `5` back to the config file and return 5.
+- If field is present but not a number between 1–10: STOP with error "Invalid iteration_limit: {value}. Must be a number between 1 and 10. Check .librespin/config.yaml".
+- Default: 5 iterations (configurable 1–10).
 
 ---
 
@@ -3224,38 +3074,10 @@ function loadIterationConfig() {
 
 **Threshold:** 5% (0.05) per CONTEXT.md "lenient plateau detection".
 
-**Implementation:**
-```javascript
-function detectPlateau(currentScore, previousScore, threshold = 0.05) {
-  // First iteration has no previous score
-  if (previousScore === null || previousScore === 0) {
-    return { isPlateau: false, improvement: null, message: 'First iteration - no baseline' };
-  }
-
-  // Calculate relative improvement
-  const absoluteImprovement = currentScore - previousScore;
-  const relativeImprovement = absoluteImprovement / previousScore;
-
-  // Plateau if improvement < threshold (5%)
-  const isPlateau = relativeImprovement < threshold;
-
-  return {
-    isPlateau,
-    improvement: Math.round(relativeImprovement * 100), // As percentage
-    absoluteImprovement: Math.round(absoluteImprovement * 10) / 10,
-    message: isPlateau
-      ? `Plateau detected: ${(relativeImprovement * 100).toFixed(1)}% improvement < 5% threshold`
-      : `Continuing: ${(relativeImprovement * 100).toFixed(1)}% improvement >= 5% threshold`
-  };
-}
-
-// Example:
-// Previous: 72%, Current: 74%
-// Improvement: (74-72)/72 = 2.8% < 5% -> PLATEAU
-//
-// Previous: 65%, Current: 72%
-// Improvement: (72-65)/65 = 10.8% >= 5% -> CONTINUE
-```
+- If first iteration (no previous score): no plateau — return `{isPlateau: false}`.
+- Compute `relativeImprovement = (currentScore - previousScore) / previousScore`.
+- Plateau if `relativeImprovement < 0.05` (5% threshold).
+- Examples: 72%→74% improvement = 2.8% → PLATEAU; 65%→72% improvement = 10.8% → CONTINUE.
 
 ---
 
@@ -3268,32 +3090,9 @@ function detectPlateau(currentScore, previousScore, threshold = 0.05) {
 1. **Top 3 clearly separated:** Top 3 concepts are >10% better than average of remaining concepts
 2. **Rescue candidates identified:** Any concept in 70-79% range while others are <70%
 
-**Implementation:**
-```javascript
-function shouldTransitionToFocused(scores) {
-  const sortedScores = scores.map(s => s.score).sort((a, b) => b - a);
-
-  // Heuristic 1: Top 3 concepts clearly separated from rest
-  if (scores.length > 3) {
-    const topThreeAvg = (sortedScores[0] + sortedScores[1] + sortedScores[2]) / 3;
-    const restAvg = sortedScores.slice(3).reduce((a, b) => a + b, 0) / (sortedScores.length - 3);
-
-    // Transition if top 3 are >10% better than rest
-    if ((topThreeAvg - restAvg) > 10) {
-      return true;
-    }
-  }
-
-  // Heuristic 2: Rescue candidates identified
-  const rescueCandidates = scores.filter(s => s.score >= 70 && s.score < 80);
-  const belowRescue = scores.filter(s => s.score < 70);
-  if (rescueCandidates.length > 0 && belowRescue.length > 0) {
-    return true;
-  }
-
-  return false;
-}
-```
+Transition to focused mode when either condition is true:
+- Heuristic 1: More than 3 concepts exist AND average of top 3 scores exceeds average of remaining scores by >10 points.
+- Heuristic 2: Any concept is in the 70–79% range AND at least one concept is below 70%.
 
 ---
 
@@ -3353,72 +3152,15 @@ PHASE 8 SELF-CRITIQUE & REFINEMENT WORKFLOW:
 
 **Purpose:** Handle case when no concepts reach 80% threshold after all iterations.
 
-**Implementation:**
-```javascript
-function handleAllFailScenario(concepts, iterations) {
-  const sortedByScore = concepts
-    .map(c => ({ name: c.name, score: calculateQualityScore(c).overall }))
-    .sort((a, b) => b.score - a.score);
-
-  const bestScore = sortedByScore[0].score;
-  const bestConcept = sortedByScore[0].name;
-
-  // Analyze common issues across concepts
-  const commonIssues = analyzeCommonFailureReasons(concepts);
-
-  return {
-    status: 'all_failed',
-    iterations: iterations,
-    bestScore: bestScore,
-    bestConcept: bestConcept,
-    conceptScores: sortedByScore,
-    commonIssues: commonIssues,
-    message: `
-All ${concepts.length} concepts failed to reach 80% threshold after ${iterations} iterations.
-
-**Highest score:** ${bestConcept} (${bestScore.toFixed(1)}%)
-
-**Common issues identified:**
-${commonIssues.map(i => `- ${i}`).join('\n')}
-
-**Suggested actions:**
-1. Relax requirements that caused most coverage failures
-2. Increase budget if cost was limiting factor
-3. Extend timeline if availability was the constraint
-4. Simplify design if complexity dominated
-
-**Options:**
-- Proceed with best available concept (${bestConcept})
-- Return to Phase 1 to relax requirements
-- Provide additional context to improve concept quality
-
-User input required to proceed.`,
-    suggestions: [
-      'Relax requirements causing coverage gaps',
-      'Increase cost budget',
-      'Accept longer lead times',
-      'Simplify design complexity',
-      'Proceed with best available'
-    ]
-  };
-}
-
-function analyzeCommonFailureReasons(concepts) {
-  const issues = [];
-
-  // Check coverage dimension
-  const avgCoverage = concepts.reduce((sum, c) => sum + c.coverageScore, 0) / concepts.length;
-  if (avgCoverage < 80) {
-    issues.push(`Low coverage (avg ${avgCoverage.toFixed(0)}%): requirements may be too stringent`);
-  }
-
-  // Check cost dimension (would need allConcepts context for relative scoring)
-  // Check availability dimension
-  // These would analyze breakdown scores if available
-
-  return issues.length > 0 ? issues : ['Multiple factors below threshold'];
-}
-```
+- Sort all concepts by quality score (descending); identify `bestConcept` and `bestScore`.
+- Identify common failure reasons: if average coverage score across concepts is <80%, report "Low coverage (avg {X}%): requirements may be too stringent". If no specific dimension identified, report "Multiple factors below threshold".
+- Output message to the user including:
+  - "All {N} concepts failed to reach 80% threshold after {iterations} iterations."
+  - Highest score: `{bestConcept} ({bestScore}%)`
+  - Common issues identified (bulleted)
+  - Suggested actions: relax coverage requirements; increase budget; accept longer lead times; simplify design
+  - Options: proceed with best available; return to Phase 5 to relax requirements; provide additional context
+  - Prompt for user input before proceeding.
 
 ---
 
@@ -3460,103 +3202,18 @@ python -m digikey.alternatives "MPN"
 
 Main verification entry point. Called by iteration loop at first and last iteration only.
 
-```javascript
-async function verifyComponentClaims(concept) {
-  const verificationResults = [];
+For each key component (filter passives), run these checks via `python -m digikey.details "MPN"` and `python -m digikey.availability "MPN"`:
 
-  // Get key components only (MCU, regulators, connectors)
-  // Skip passives (resistors, capacitors)
-  const keyComponents = concept.bom.filter(part => isKeyComponent(part));
+| Check | Pass Condition | Fail/Flag Condition | Action |
+|-------|---------------|---------------------|--------|
+| existence | Part found in DigiKey | Part not found | FAIL → find_alternative |
+| datasheet | URL present | URL missing | WARN |
+| pricing | Price within 25% of BOM estimate | Price deviation >25% | FLAG → update_bom_cost |
+| lifecycle | Status = Active | NRND or Obsolete | FAIL → find_replacement |
+| availability | Stock ≥100 OR lead time ≤8 weeks | Both below threshold | FLAG → find_alternative |
+| rohs | RoHS Compliant | Non-compliant or unknown | WARN |
 
-  for (const part of keyComponents) {
-    const result = { mpn: part.mpn, category: part.category, checks: [] };
-
-    // Call DigiKey API: python -m digikey.details "MPN"
-    const details = await callDigiKeyDetails(part.mpn);
-
-    if (!details || details.error) {
-      result.checks.push({
-        check: 'existence',
-        status: 'FAIL',
-        message: `Part not found in DigiKey: ${part.mpn}`,
-        action: 'find_alternative'
-      });
-      verificationResults.push(result);
-      continue;
-    }
-
-    // Check 1: Datasheet URL accessible
-    result.checks.push({
-      check: 'datasheet',
-      status: details.datasheet_url ? 'PASS' : 'WARN',
-      value: details.datasheet_url || 'Not available'
-    });
-
-    // Check 2: Price within 25% of BOM estimate (threshold per CONTEXT.md)
-    const priceChange = Math.abs(details.unit_price - part.estimatedPrice) / part.estimatedPrice;
-    result.checks.push({
-      check: 'pricing',
-      status: priceChange <= 0.25 ? 'PASS' : 'FLAG',
-      bomPrice: part.estimatedPrice,
-      actualPrice: details.unit_price,
-      change: `${(priceChange * 100).toFixed(0)}%`,
-      action: priceChange > 0.25 ? 'update_bom_cost' : null
-    });
-
-    // Check 3: Lifecycle status (Active required, NRND/Obsolete = FAIL)
-    if (details.lifecycle === 'Active') {
-      result.checks.push({ check: 'lifecycle', status: 'PASS', value: 'Active' });
-    } else {
-      result.checks.push({
-        check: 'lifecycle',
-        status: 'FAIL',
-        value: details.lifecycle,
-        message: `Part is ${details.lifecycle}`,
-        action: 'find_replacement'
-      });
-    }
-
-    // Check 4: Stock and lead time (threshold: >8 weeks or <100 stock)
-    const availability = await callDigiKeyAvailability(part.mpn);
-    const stockOk = availability.stock >= 100;
-    const leadTimeOk = availability.lead_time_weeks <= 8;
-    result.checks.push({
-      check: 'availability',
-      status: (stockOk || leadTimeOk) ? 'PASS' : 'FLAG',
-      stock: availability.stock,
-      leadTime: `${availability.lead_time_weeks} weeks`,
-      action: (!stockOk && !leadTimeOk) ? 'find_alternative' : null
-    });
-
-    // Check 5: RoHS compliance status
-    result.checks.push({
-      check: 'rohs',
-      status: details.rohs_status === 'Compliant' ? 'PASS' : 'WARN',
-      value: details.rohs_status || 'Unknown'
-    });
-
-    verificationResults.push(result);
-  }
-
-  return verificationResults;
-}
-```
-
-**Verification Result Format:**
-```javascript
-{
-  mpn: string,
-  category: string,
-  checks: [
-    { check: 'existence', status: 'PASS'|'FAIL', ... },
-    { check: 'datasheet', status: 'PASS'|'WARN', value: url },
-    { check: 'pricing', status: 'PASS'|'FLAG', bomPrice: X, actualPrice: Y, change: 'N%' },
-    { check: 'lifecycle', status: 'PASS'|'FAIL', value: 'Active'|'NRND'|'Obsolete' },
-    { check: 'availability', status: 'PASS'|'FLAG', stock: N, leadTime: 'X weeks' },
-    { check: 'rohs', status: 'PASS'|'WARN', value: 'Compliant'|... }
-  ]
-}
-```
+If DigiKey API returns an error for a part: log FAIL (existence), skip remaining checks for that part, continue to next.
 
 **Verification Display Format:**
 ```markdown
@@ -3577,118 +3234,17 @@ async function verifyComponentClaims(concept) {
 
 **When to call:** When verifyComponentClaims detects lifecycle, availability, or existence failures.
 
-```javascript
-async function autoFixVerificationFailure(part, failureType) {
-  // Find alternatives using DigiKey API
-  // python -m digikey.alternatives "MPN"
-  const alternatives = await callDigiKeyAlternatives(part.mpn);
-
-  if (!alternatives || alternatives.length === 0) {
-    return {
-      status: 'no_replacement',
-      message: `No alternatives found for ${part.mpn}`,
-      originalPart: part.mpn,
-      action: 'suggest_to_user'
-    };
-  }
-
-  // Filter alternatives based on failure type
-  let validAlternatives;
-
-  if (failureType === 'lifecycle') {
-    // Find Active alternatives only
-    validAlternatives = alternatives.filter(alt =>
-      alt.lifecycle === 'Active'
-    );
-  } else if (failureType === 'availability') {
-    // Find in-stock (>100) or short lead time (<=8 weeks)
-    validAlternatives = alternatives.filter(alt =>
-      alt.stock > 100 || alt.lead_time_weeks <= 8
-    );
-  } else if (failureType === 'price') {
-    // Find within 50% of original estimate
-    validAlternatives = alternatives.filter(alt =>
-      alt.unit_price <= part.estimatedPrice * 1.5
-    );
-  } else if (failureType === 'existence') {
-    // Any valid alternative is acceptable
-    validAlternatives = alternatives.filter(alt =>
-      alt.lifecycle === 'Active' && (alt.stock > 100 || alt.lead_time_weeks <= 8)
-    );
-  }
-
-  if (!validAlternatives || validAlternatives.length === 0) {
-    return {
-      status: 'no_valid_replacement',
-      message: `Alternatives found but none meet criteria for ${part.mpn}`,
-      originalPart: part.mpn,
-      alternatives: alternatives.slice(0, 3), // Show top 3 for user
-      action: 'suggest_to_user'
-    };
-  }
-
-  // Select best alternative: balance cost, availability, vendor reputation
-  const selectedAlt = selectBestAlternative(validAlternatives, part.estimatedPrice);
-
-  return {
-    status: 'auto_fixed',
-    originalPart: part.mpn,
-    replacement: selectedAlt.mpn,
-    manufacturer: selectedAlt.manufacturer,
-    reason: `Replaced due to ${failureType} issue`,
-    newPrice: selectedAlt.unit_price,
-    newStock: selectedAlt.stock,
-    newLeadTime: selectedAlt.lead_time_weeks
-  };
-}
-
-function selectBestAlternative(alternatives, originalPrice) {
-  // Score alternatives: balance cost, availability, simplicity (vendor reputation)
-  // Per CONTEXT.md: prefer DigiKey > Mouser > Arrow/Newark
-  const preferredManufacturers = [
-    'Texas Instruments', 'STMicroelectronics', 'Microchip',
-    'Nordic Semiconductor', 'Analog Devices', 'NXP'
-  ];
-
-  return alternatives
-    .map(alt => {
-      // Lower price relative to original = higher score
-      const priceScore = 100 - Math.min(100, (alt.unit_price / originalPrice) * 50);
-
-      // More stock = higher score (capped at 1000)
-      const stockScore = Math.min(100, alt.stock / 10);
-
-      // Shorter lead time = higher score
-      const leadTimeScore = Math.max(0, 100 - (alt.lead_time_weeks * 12.5));
-
-      // Preferred manufacturer bonus
-      const vendorBonus = preferredManufacturers.some(m =>
-        alt.manufacturer?.includes(m)) ? 20 : 0;
-
-      return {
-        ...alt,
-        score: (priceScore * 0.30) + (stockScore * 0.25) +
-               (leadTimeScore * 0.25) + vendorBonus
-      };
-    })
-    .sort((a, b) => b.score - a.score)
-    [0];
-}
-
-async function callDigiKeyAlternatives(mpn) {
-  // Execute: python -m digikey.alternatives "MPN"
-  // Returns array of alternative parts
-  const result = await execBash(`python -m digikey.alternatives "${mpn}"`);
-  if (result.error) return null;
-  return JSON.parse(result.stdout);
-}
-```
-
-**Auto-fix Error Handling:**
-- If DigiKey API returns error or part not found: status = 'FAIL', action = 'find_alternative'
-- If no alternative found: status = 'no_replacement', escalate to user
-- Log all auto-fixes silently (reflected in final output, per CONTEXT.md)
-```
+- Call `python -m digikey.alternatives "MPN"` to get alternatives list.
+- If no alternatives returned: status = `no_replacement`, escalate to user.
+- Filter alternatives by failure type:
+  - `lifecycle` → Active alternatives only
+  - `availability` → stock >100 OR lead time ≤8 weeks
+  - `price` → unit price ≤ 1.5× original estimate
+  - `existence` → Active AND (stock >100 OR lead time ≤8 weeks)
+- If no alternatives pass the filter: status = `no_valid_replacement`, show top 3 to user.
+- Select best alternative by scoring: price score (30%) + stock score (25%) + lead time score (25%) + preferred manufacturer bonus (+20 if TI/ST/Microchip/Nordic/ADI/NXP).
+- Log all auto-fixes silently; reflect changes in final output only.
+- If API error: FAIL with action = `find_alternative`.
 
 ---
 
@@ -3713,66 +3269,10 @@ async function callDigiKeyAlternatives(mpn) {
 
 **Purpose:** Main gap closure entry point. Filters to Critical gaps and generates closure actions.
 
-```javascript
-function generateGapClosureActions(concept, gaps) {
-  const actions = [];
-
-  // Filter gaps to Critical priority only (per CONTEXT.md: "Targeted gap closure")
-  const criticalGaps = gaps.filter(gap => gap.priority === 'Critical');
-
-  // Skip Nice-to-have gaps explicitly (per CONTEXT.md: "accept Nice-to-have gaps")
-  const skippedGaps = gaps.filter(gap => gap.priority === 'Nice-to-have');
-  if (skippedGaps.length > 0) {
-    actions.push({
-      type: 'skip',
-      gaps: skippedGaps.map(g => g.id || g.requirement),
-      reason: 'Nice-to-have requirements accepted as gaps per strategy',
-      count: skippedGaps.length
-    });
-  }
-
-  // Process Important gaps with lower priority
-  const importantGaps = gaps.filter(gap => gap.priority === 'Important');
-
-  // Process Critical gaps first
-  for (const gap of criticalGaps) {
-    // Determine best closure action
-    const closureOptions = analyzeGapClosureOptions(gap, concept);
-
-    if (closureOptions.length === 0) {
-      // No viable closure - suggest requirement reinterpretation
-      actions.push({
-        type: 'requirement_reinterpretation',
-        gap: gap.id || gap.requirement,
-        requirement: gap.description || gap.requirement,
-        message: `No viable closure found for: ${gap.description || gap.requirement}`,
-        suggestion: `Consider relaxing requirement or accepting partial coverage`,
-        cost: 0,
-        complexity: 'low'
-      });
-      continue;
-    }
-
-    // Select best option (balance cost, availability, simplicity)
-    const selectedAction = selectBestClosureAction(closureOptions);
-    actions.push(selectedAction);
-  }
-
-  // Optionally process Important gaps if resources allow
-  for (const gap of importantGaps) {
-    const closureOptions = analyzeGapClosureOptions(gap, concept);
-    if (closureOptions.length > 0) {
-      const selectedAction = selectBestClosureAction(closureOptions);
-      // Only include if low complexity and low cost
-      if (selectedAction.complexity === 'low' && selectedAction.cost < 5) {
-        actions.push(selectedAction);
-      }
-    }
-  }
-
-  return actions;
-}
-```
+- Filter to Critical gaps only; log all Nice-to-have gaps as skipped ("accepted as gaps per strategy").
+- For each Critical gap: find closure options (swap, add, tweak); if none found, log `requirement_reinterpretation` ("Consider relaxing requirement or accepting partial coverage").
+- Select best option using priority order: low complexity first, then lower cost.
+- For Important gaps: also apply if best option is low complexity AND cost impact <$5.
 
 ---
 
@@ -3780,169 +3280,22 @@ function generateGapClosureActions(concept, gaps) {
 
 **Purpose:** Find all viable closure options for a given gap.
 
-```javascript
-function analyzeGapClosureOptions(gap, concept) {
-  const options = [];
+For each gap, evaluate these option types and collect all that apply:
 
-  // Option 1: Component swap
-  // Find existing component that partially addresses gap and find better replacement
-  const swapOption = findComponentSwap(gap, concept);
-  if (swapOption) {
-    options.push({
-      type: 'component_swap',
-      gap: gap.id || gap.requirement,
-      original: swapOption.originalPart,
-      replacement: swapOption.newPart,
-      reason: swapOption.reason,
-      cost: swapOption.costImpact,
-      complexity: 'low'  // Swaps are typically low complexity
-    });
-  }
+**component_swap** (complexity: low): Match gap keywords to BOM entries to find upgrade candidates:
+- `gpio` or `pin` → swap MCU for one with more GPIO pins (~$2 impact)
+- `current` or `power` → swap regulator for higher current variant (~$1 impact)
 
-  // Option 2: Component addition
-  // Identify new component that addresses gap
-  const addOption = findComponentAddition(gap, concept);
-  if (addOption) {
-    options.push({
-      type: 'component_addition',
-      gap: gap.id || gap.requirement,
-      newPart: addOption.part,
-      purpose: addOption.purpose,
-      cost: addOption.costImpact,
-      complexity: 'medium'  // Additions add to design complexity
-    });
-  }
+**component_addition** (complexity: medium): Match gap keywords to known additions:
+- `5v` or `boost` → TPS61200 boost converter (+$1.50)
+- `multiplexer` or `mux` → CD74HC4051 analog mux (+$0.80)
+- `level shift` or `voltage translation` → TXS0108E level shifter (+$1.20)
+- `esd` or `protection` → TPD4E05U06 ESD protection (+$0.50)
 
-  // Option 3: Architecture tweak
-  // Assess if connectivity/topology change helps
-  const tweakOption = findArchitectureTweak(gap, concept);
-  if (tweakOption) {
-    options.push({
-      type: 'architecture_tweak',
-      gap: gap.id || gap.requirement,
-      change: tweakOption.description,
-      impact: tweakOption.impact,
-      cost: tweakOption.costImpact,
-      complexity: tweakOption.complexity
-    });
-  }
-
-  return options;
-}
-
-function findComponentSwap(gap, concept) {
-  // Analyze gap requirements and find existing component that could be upgraded
-  // Example: gap needs more GPIO -> find MCU with more GPIO pins
-
-  const gapKeywords = (gap.description || gap.requirement || '').toLowerCase();
-
-  // Common swap patterns
-  if (gapKeywords.includes('gpio') || gapKeywords.includes('pin')) {
-    // Find MCU in BOM
-    const mcu = concept.bom.find(p => isKeyComponent(p) &&
-      (p.category?.includes('MCU') || p.description?.includes('Microcontroller')));
-    if (mcu) {
-      return {
-        originalPart: mcu.mpn,
-        newPart: '[Search for MCU with more GPIO]',
-        reason: 'Upgrade to MCU with more GPIO pins',
-        costImpact: 2  // Estimate
-      };
-    }
-  }
-
-  if (gapKeywords.includes('current') || gapKeywords.includes('power')) {
-    // Find regulator in BOM
-    const regulator = concept.bom.find(p =>
-      p.category?.includes('Regulator') || p.description?.includes('Regulator'));
-    if (regulator) {
-      return {
-        originalPart: regulator.mpn,
-        newPart: '[Search for higher current regulator]',
-        reason: 'Upgrade to regulator with higher current capability',
-        costImpact: 1
-      };
-    }
-  }
-
-  return null;  // No swap identified
-}
-
-function findComponentAddition(gap, concept) {
-  // Identify new component that could address the gap
-  const gapKeywords = (gap.description || gap.requirement || '').toLowerCase();
-
-  // Common addition patterns
-  if (gapKeywords.includes('5v') || gapKeywords.includes('boost')) {
-    return {
-      part: 'TPS61200 (Boost converter)',
-      purpose: 'Provide 5V output from lower voltage rail',
-      costImpact: 1.50
-    };
-  }
-
-  if (gapKeywords.includes('multiplexer') || gapKeywords.includes('mux')) {
-    return {
-      part: 'CD74HC4051 (Analog mux)',
-      purpose: 'Expand analog input channels',
-      costImpact: 0.80
-    };
-  }
-
-  if (gapKeywords.includes('level shift') || gapKeywords.includes('voltage translation')) {
-    return {
-      part: 'TXS0108E (Level shifter)',
-      purpose: 'Voltage level translation between logic domains',
-      costImpact: 1.20
-    };
-  }
-
-  if (gapKeywords.includes('esd') || gapKeywords.includes('protection')) {
-    return {
-      part: 'TPD4E05U06 (ESD protection)',
-      purpose: 'ESD protection for external interfaces',
-      costImpact: 0.50
-    };
-  }
-
-  return null;  // No addition identified
-}
-
-function findArchitectureTweak(gap, concept) {
-  // Assess if architecture change addresses gap
-  const gapKeywords = (gap.description || gap.requirement || '').toLowerCase();
-
-  // Common architecture tweaks
-  if (gapKeywords.includes('redundan') || gapKeywords.includes('backup')) {
-    return {
-      description: 'Add redundant power path with automatic failover',
-      impact: 'Improves reliability but adds complexity',
-      costImpact: 3,
-      complexity: 'high'
-    };
-  }
-
-  if (gapKeywords.includes('isolat')) {
-    return {
-      description: 'Add galvanic isolation on critical interfaces',
-      impact: 'Improves safety and noise immunity',
-      costImpact: 5,
-      complexity: 'medium'
-    };
-  }
-
-  if (gapKeywords.includes('distribut') || gapKeywords.includes('modular')) {
-    return {
-      description: 'Split into modular subsystems with defined interfaces',
-      impact: 'Improves maintainability and testability',
-      costImpact: 2,
-      complexity: 'high'
-    };
-  }
-
-  return null;  // No tweak identified
-}
-```
+**architecture_tweak** (complexity varies): Match gap keywords to structural changes:
+- `redundan` or `backup` → redundant power path with failover (complexity: high, ~$3)
+- `isolat` → galvanic isolation on critical interfaces (complexity: medium, ~$5)
+- `distribut` or `modular` → split into modular subsystems (complexity: high, ~$2)
 
 ---
 
@@ -3952,21 +3305,7 @@ function findArchitectureTweak(gap, concept) {
 
 **Priority order (per CONTEXT.md):** low complexity > low cost > simple change
 
-```javascript
-function selectBestClosureAction(options) {
-  // Sort by: complexity (low first), then cost (low first)
-  const complexityOrder = { low: 0, medium: 1, high: 2 };
-
-  return options.sort((a, b) => {
-    // Primary: Complexity (low is better)
-    const complexityDiff = complexityOrder[a.complexity] - complexityOrder[b.complexity];
-    if (complexityDiff !== 0) return complexityDiff;
-
-    // Secondary: Cost (lower is better)
-    return a.cost - b.cost;
-  })[0];
-}
-```
+Sort options by complexity first (low < medium < high), then by cost (lower is better). Return the first result.
 
 ---
 
@@ -3974,93 +3313,13 @@ function selectBestClosureAction(options) {
 
 **Purpose:** Apply the selected closure action to the concept.
 
-```javascript
-function applyClosureAction(concept, action) {
-  switch (action.type) {
-    case 'component_swap':
-      // Replace part in BOM
-      const bomIndex = concept.bom.findIndex(p => p.mpn === action.original);
-      if (bomIndex >= 0) {
-        concept.bom[bomIndex].mpn = action.replacement;
-        concept.bom[bomIndex].note = `Swapped from ${action.original}: ${action.reason}`;
-      }
-      // Update concept cost estimate
-      concept.bomCost += action.cost;
-      break;
-
-    case 'component_addition':
-      // Add part to BOM
-      concept.bom.push({
-        mpn: action.newPart,
-        category: 'Added',
-        description: action.purpose,
-        quantity: 1,
-        estimatedPrice: action.cost,
-        note: `Added to address gap: ${action.gap}`
-      });
-      concept.bomCost += action.cost;
-      break;
-
-    case 'architecture_tweak':
-      // Document change in concept notes
-      concept.architectureNotes = concept.architectureNotes || [];
-      concept.architectureNotes.push({
-        change: action.change,
-        impact: action.impact,
-        gap: action.gap
-      });
-      concept.bomCost += action.cost;
-      break;
-
-    case 'requirement_reinterpretation':
-      // Log suggestion for user (do not auto-apply)
-      concept.userSuggestions = concept.userSuggestions || [];
-      concept.userSuggestions.push({
-        requirement: action.requirement,
-        suggestion: action.suggestion,
-        message: action.message
-      });
-      break;
-
-    case 'skip':
-      // Already logged in actions, no concept modification needed
-      break;
-  }
-
-  // Mark gap as addressed (or suggested)
-  concept.addressedGaps = concept.addressedGaps || [];
-  concept.addressedGaps.push({
-    gap: action.gap || action.gaps,
-    action: action.type,
-    cost: action.cost
-  });
-
-  return concept;
-}
-```
-
-**Closure Action Format:**
-```javascript
-{
-  type: 'component_swap' | 'component_addition' | 'architecture_tweak' | 'requirement_reinterpretation',
-  gap: string,  // Gap ID/description
-  // For swap:
-  original: string,
-  replacement: string,
-  // For addition:
-  newPart: string,
-  purpose: string,
-  // For tweak:
-  change: string,
-  impact: string,
-  // For reinterpretation:
-  message: string,
-  suggestion: string,
-  // Common:
-  cost: number,  // Cost impact
-  complexity: 'low' | 'medium' | 'high'
-}
-```
+Apply the selected action to the concept in-memory:
+- `component_swap`: Find part by original MPN in BOM; replace MPN and add note "Swapped from {original}: {reason}"; add cost impact to BOM total.
+- `component_addition`: Push new part entry to BOM (category: "Added", description: purpose, qty: 1); add cost impact.
+- `architecture_tweak`: Append to concept's architecture notes (change, impact, gap reference); add cost impact.
+- `requirement_reinterpretation`: Log suggestion to user suggestions list (do not modify BOM).
+- `skip`: No modification needed.
+- After applying: record gap as addressed in `addressedGaps` list with action type and cost.
 
 **Gap Closure Display Format:**
 ```markdown
@@ -4117,11 +3376,9 @@ function applyClosureAction(concept, action) {
 
 **Update state file** `.librespin/state.md` — set `phase` to `6-self-critique`:
 
-```javascript
-const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
-const updatedState = existingState.replace(/^phase: .+$/m, `phase: '6-self-critique'`);
-fs.writeFileSync('.librespin/state.md', updatedState);
-```
+- Read `.librespin/state.md`.
+- Replace the `phase: ...` frontmatter field value with `'6-self-critique'`.
+- Write the updated content back to `.librespin/state.md`.
 
 ## PHASE 7: FINAL OUTPUT
 
