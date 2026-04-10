@@ -276,45 +276,21 @@ If INPUT_FILE parameter is not "interactive" and ends with .yaml or .yml:
 
 **1. Load and parse YAML securely:**
 
-```javascript
-const yaml = require('js-yaml');
-const fs = require('fs');
-
-try {
-  const fileContents = fs.readFileSync(INPUT_FILE, 'utf8');
-
-  // SECURITY: Use FAILSAFE_SCHEMA (strings, arrays, plain objects only)
-  // This prevents type coercion attacks (CVE-2022-1471) and arbitrary deserialization
-  const requirements = yaml.load(fileContents, {
-    schema: yaml.FAILSAFE_SCHEMA  // No type coercion, no code execution
-  });
-
-  // Validate schema_version field
-  if (!requirements.schema_version) {
-    throw new Error('Missing schema_version field. See template: .claude/librespin/templates/requirements.yaml');
-  }
-  if (requirements.schema_version !== 1) {
-    throw new Error(`Unsupported schema_version: ${requirements.schema_version}. Expected: 1`);
-  }
-
-} catch (e) {
-  console.error(`Failed to load requirements from ${INPUT_FILE}:`);
-  console.error(e.message);
-  console.error('\nSee valid format: .claude/librespin/templates/requirements.yaml');
-  process.exit(1);
-}
-```
+- Read the file at `INPUT_FILE` as plain text.
+- Parse with FAILSAFE_SCHEMA (strings, arrays, plain objects only — no type coercion, no code execution). This prevents CVE-2022-1471-style deserialization attacks.
+- If `schema_version` field is missing, stop and display: "Missing schema_version field. See template: .claude/librespin/templates/requirements.yaml"
+- If `schema_version` is not `1`, stop and display: "Unsupported schema_version: {value}. Expected: 1"
+- On any parse error, stop and display the error message plus: "See valid format: .claude/librespin/templates/requirements.yaml"
 
 **2. Calculate completeness of loaded YAML:**
 
-Use `calculateCompletenessScore` function (implemented below in COMPLETENESS SCORING section) to evaluate loaded requirements.
+Apply the completeness scoring rules from the COMPLETENESS SCORING section below. Display the result:
 
-```javascript
-const scoreResult = calculateCompletenessScore(requirements);
-console.log(`Loaded requirements score: ${scoreResult.score}/100`);
-console.log(`  Critical: ${scoreResult.breakdown.critical}/50`);
-console.log(`  Important: ${scoreResult.breakdown.important}/30`);
-console.log(`  Nice-to-have: ${scoreResult.breakdown.niceToHave}/20`);
+```
+Loaded requirements score: {score}/100
+  Critical: {critical}/50
+  Important: {important}/30
+  Nice-to-have: {niceToHave}/20
 ```
 
 **3. Hybrid gap-filling mode:**
@@ -746,167 +722,40 @@ Missing important requirements:
 
 ### IMPLEMENTATION: calculateCompletenessScore
 
-**Function signature (conceptual):**
+**Field lists by category:**
 
-```javascript
-function calculateCompletenessScore(requirements) {
-  // Define field lists by category
-  const criticalFields = [
-    'project_name', 'use_case',
-    'environment.location', 'environment.temperature_min_c', 'environment.temperature_max_c',
-    'connectivity.primary', 'connectivity.region',
-    'connectivity.port_count', 'connectivity.hub_acceptable',
-    'power.source', 'power.battery_life_target'
-  ];
+Critical fields (11 total): `project_name`, `use_case`, `environment.location`, `environment.temperature_min_c`, `environment.temperature_max_c`, `connectivity.primary`, `connectivity.region`, `connectivity.port_count`, `connectivity.hub_acceptable`, `power.source`, `power.battery_life_target`
 
-  const importantFields = [
-    'sensors', 'hmi.buttons', 'hmi.leds', 'hmi.display',
-    'physical.max_pcb_size_mm', 'physical.enclosure'
-  ];
+Important fields (6 total): `sensors`, `hmi.buttons`, `hmi.leds`, `hmi.display`, `physical.max_pcb_size_mm`, `physical.enclosure`
 
-  const niceToHaveFields = [
-    'production.volume', 'production.bom_target_usd',
-    'compliance', 'lifecycle.years', 'preferences'
-  ];
+Nice-to-have fields (5 total): `production.volume`, `production.bom_target_usd`, `compliance`, `lifecycle.years`, `preferences`
 
-  // Count answered fields in each category
-  const answeredCritical = criticalFields.filter(field => isFieldAnswered(requirements, field)).length;
-  const answeredImportant = importantFields.filter(field => isFieldAnswered(requirements, field)).length;
-  const answeredNice = niceToHaveFields.filter(field => isFieldAnswered(requirements, field)).length;
+**A field is answered if** the value exists, is not null/empty string, and is not one of: "i don't know", "not specified", "n/a", "unknown", "tbd". Navigate nested paths using dot notation (e.g., `environment.location` → check `requirements.environment.location`).
 
-  // Calculate weighted score (50/30/20 allocation)
-  const criticalScore = (answeredCritical / criticalFields.length) * 50;
-  const importantScore = (answeredImportant / importantFields.length) * 30;
-  const niceScore = (answeredNice / niceToHaveFields.length) * 20;
+**Scoring formula:**
 
-  const totalScore = Math.round(criticalScore + importantScore + niceScore);
+- `criticalScore = (answeredCritical / 11) × 50`
+- `importantScore = (answeredImportant / 6) × 30`
+- `niceScore = (answeredNice / 5) × 20`
+- `totalScore = round(criticalScore + importantScore + niceScore)`
 
-  return {
-    score: totalScore,
-    breakdown: {
-      critical: Math.round(criticalScore),
-      important: Math.round(importantScore),
-      niceToHave: Math.round(niceScore)
-    },
-    counts: {
-      criticalAnswered: answeredCritical,
-      criticalTotal: criticalFields.length,
-      importantAnswered: answeredImportant,
-      importantTotal: importantFields.length,
-      niceAnswered: answeredNice,
-      niceTotal: niceToHaveFields.length
-    }
-  };
-}
+**Usage in agent flow — after Section 2 completion:**
 
-function isFieldAnswered(requirements, fieldPath) {
-  // Helper to check nested fields (e.g., "environment.location")
-  const value = getNestedField(requirements, fieldPath);
-
-  // Field is answered if:
-  // - Exists and not null/undefined
-  // - Not empty string
-  // - Not "I don't know" or similar non-answers
-  // - Not "NOT SPECIFIED" placeholder
-
-  if (value === null || value === undefined || value === '') {
-    return false;
-  }
-
-  const strValue = String(value).toLowerCase().trim();
-  const nonAnswers = ['i don\'t know', 'not specified', 'n/a', 'unknown', 'tbd'];
-
-  return !nonAnswers.includes(strValue);
-}
-
-function getNestedField(obj, path) {
-  // Navigate nested object paths: "environment.location" → obj.environment.location
-  return path.split('.').reduce((current, key) => current?.[key], obj);
-}
-```
-
-**Usage in agent flow:**
-
-After Section 2 completion:
-```javascript
-const scoreResult = calculateCompletenessScore(requirements);
-
-if (scoreResult.score < 70) {
-  console.log(`Completeness: ${scoreResult.score}/100`);
-  console.log(`  Critical: ${scoreResult.breakdown.critical}/50 (${scoreResult.counts.criticalAnswered}/${scoreResult.counts.criticalTotal} answered)`);
-  console.log(`  Important: ${scoreResult.breakdown.important}/30 (${scoreResult.counts.importantAnswered}/${scoreResult.counts.importantTotal} answered)`);
-  console.log(`  Nice-to-have: ${scoreResult.breakdown.niceToHave}/20 (${scoreResult.counts.niceAnswered}/${scoreResult.counts.niceTotal} answered)`);
-
-  // Identify and report gaps
-  reportMissingFields(requirements);
-
-  // Block progression
-  return; // Do not proceed to Phase 2
-}
-```
+- Calculate total score using the formula above.
+- If score < 70, display completeness breakdown and block progression:
+  - "Completeness: {score}/100"
+  - "  Critical: {critical}/50 ({answeredCritical}/11 answered)"
+  - "  Important: {important}/30 ({answeredImportant}/6 answered)"
+  - "  Nice-to-have: {niceToHave}/20 ({answeredNice}/5 answered)"
+- Then report missing fields and do not proceed to Phase 2.
 
 **Gap identification and reporting:**
 
-```javascript
-function reportMissingFields(requirements) {
-  const criticalFields = {
-    'connectivity.port_count': 'CRITICAL - needed for USB topology validation',
-    'connectivity.hub_acceptable': 'CRITICAL - needed for USB hub requirements'
-  };
-
-  const importantFields = {
-    'sensors': 'needed for component selection and I/O planning',
-    'hmi.buttons': 'needed for user interaction specification',
-    'hmi.leds': 'needed for user interaction specification',
-    'hmi.display': 'needed for user interaction specification',
-    'physical.max_pcb_size_mm': 'needed for component selection constraints',
-    'physical.enclosure': 'needed for environmental protection and mounting'
-  };
-
-  const missingCritical = [];
-  const missingImportant = [];
-
-  for (const [field, reason] of Object.entries(criticalFields)) {
-    if (!isFieldAnswered(requirements, field)) {
-      missingCritical.push({ field, reason });
-    }
-  }
-
-  for (const [field, reason] of Object.entries(importantFields)) {
-    if (!isFieldAnswered(requirements, field)) {
-      missingImportant.push({ field, reason });
-    }
-  }
-
-  if (missingCritical.length > 0) {
-    console.log('\nMissing CRITICAL requirements:');
-    missingCritical.forEach(m => {
-      const fieldName = m.field.split('.').pop();
-      console.log(`  - ${fieldName}: ${m.reason}`);
-    });
-  }
-
-  if (missingImportant.length > 0) {
-    console.log('\nMissing important requirements:');
-
-    // Group by category
-    const categories = {
-      'HMI': ['hmi.buttons', 'hmi.leds', 'hmi.display'],
-      'Physical': ['physical.max_pcb_size_mm', 'physical.enclosure'],
-      'Sensors': ['sensors']
-    };
-
-    for (const [category, fields] of Object.entries(categories)) {
-      const categoryMissing = missingImportant.filter(m => fields.includes(m.field));
-      if (categoryMissing.length > 0) {
-        const fieldNames = categoryMissing.map(m => m.field.split('.').pop()).join(', ');
-        const reason = categoryMissing[0].reason;
-        console.log(`  - ${category}: ${fieldNames} (${reason})`);
-      }
-    }
-  }
-}
-```
+- Check critical gap fields: `connectivity.port_count` (needed for USB topology validation), `connectivity.hub_acceptable` (needed for USB hub requirements). If missing, list under "Missing CRITICAL requirements:".
+- Check important gap fields: `sensors` (component selection and I/O planning), `hmi.buttons`, `hmi.leds`, `hmi.display` (user interaction specification), `physical.max_pcb_size_mm` (component selection constraints), `physical.enclosure` (environmental protection and mounting). If missing, group by category under "Missing important requirements:":
+  - HMI: list missing hmi.* fields
+  - Physical: list missing physical.* fields
+  - Sensors: list if missing
 
 **Threshold enforcement logic:**
 
@@ -1042,63 +891,36 @@ After requirements and success criteria collection complete:
 
 **1. Write requirements.yaml** to `.librespin/01-requirements/requirements.yaml`
 
-Use `yaml.dump()` to serialize requirements object:
-
-```javascript
-const yaml = require('js-yaml');
-const fs = require('fs');
-
-const requirementsYaml = yaml.dump(requirements, {
-  schema: yaml.FAILSAFE_SCHEMA,
-  lineWidth: -1  // Disable line wrapping
-});
-
-fs.writeFileSync('.librespin/01-requirements/requirements.yaml', requirementsYaml);
-```
+- Serialize the final requirements object to YAML format (no line wrapping).
+- Write to `.librespin/01-requirements/requirements.yaml`.
 
 **2. Create config file** `.librespin/config.yaml` (if not exists)
 
-```javascript
-const configPath = '.librespin/config.yaml';
-if (!fs.existsSync(configPath)) {
-  const defaultConfig = yaml.dump({
-    draft_count: 5,
-    iteration_limit: 5,
-    confidence_threshold: 80
-  });
-  fs.writeFileSync(configPath, defaultConfig);
-}
-```
+- If `.librespin/config.yaml` does not exist, create it with these defaults:
+  - `draft_count: 5`
+  - `iteration_limit: 5`
+  - `confidence_threshold: 80`
 
 **3. Update state file** `.librespin/state.md`
 
-Write with YAML frontmatter:
+Write a state file with YAML frontmatter followed by markdown content. Frontmatter fields:
+- `phase: '3-requirements-gathering'`
+- `completed: {ISO 8601 timestamp}`
+- `completeness_score: {score}`
+- `source: 'interactive'` (or `'yaml'` if loaded from file)
+- `schema_version: 1`
 
-```javascript
-const frontmatter = yaml.dump({
-  phase: '3-requirements-gathering',
-  completed: new Date().toISOString(),
-  completeness_score: scoreResult.score,
-  source: INPUT_FILE === 'interactive' ? 'interactive' : 'yaml',
-  schema_version: 1
-});
-
-const successCriteriaList = successCriteria.map(c => `- ${c}`).join('\n');
-
-const stateContent = `---
-${frontmatter.trim()}
----
-
+Body content:
+```
 # Requirements
 
-${requirementsYaml}
+{requirements YAML content}
 
 # Success Criteria
 
-${successCriteriaList}
-`;
-
-fs.writeFileSync('.librespin/state.md', stateContent);
+- {criterion 1}
+- {criterion 2}
+...
 ```
 
 **4. Display summary to user:**
