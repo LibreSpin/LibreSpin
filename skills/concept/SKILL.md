@@ -1154,364 +1154,95 @@ Create explicit mappings between requirements terminology and component configur
 
 ### CONCEPT LOADING
 
-Load generated concepts from Phase 02:
-
-```javascript
-const conceptsDir = '.librespin/02-concepts/';
-const conceptFiles = fs.readdirSync(conceptsDir)
-  .filter(f => f.startsWith('concept-') && f.endsWith('.md'));
-
-if (conceptFiles.length === 0) {
-  throw new Error(`No concept files found in ${conceptsDir}. Run Phase 2 first.`);
-}
-
-console.log(`Creating requirement mappings for ${conceptFiles.length} concepts...`);
-```
+Load all concept files from `.librespin/02-concepts/` — files whose names start with `concept-` and end with `.md`. If no concept files found, stop with: "No concept files found in .librespin/02-concepts/. Run Phase 2 first." Display: "Creating requirement mappings for {count} concepts..."
 
 ### REQUIREMENTS LOADING
 
-Load requirements to extract technical specification terms:
-
-```javascript
-const requirementsPath = '.librespin/01-requirements/requirements.yaml';
-const requirements = yaml.load(fs.readFileSync(requirementsPath, 'utf8'), {
-  schema: yaml.FAILSAFE_SCHEMA
-});
-```
+Load requirements from `.librespin/01-requirements/requirements.yaml` (FAILSAFE_SCHEMA, no type coercion).
 
 ### TECHNICAL TERM EXTRACTION
 
-Extract all technical specification terms from requirements:
+Extract all technical specification terms from requirements into 6 categories: `protocols`, `interfaces`, `resources`, `electrical`, `performance`, `physical`.
 
-```javascript
-function extractTechnicalTerms(requirements) {
-  const terms = {
-    protocols: [],      // SPI Mode 1, I2C Fast Mode, UART 115200
-    interfaces: [],     // Quad-SPI, I2C, UART
-    resources: [],      // GPIO count, ADC channels, timers
-    electrical: [],     // Voltage levels, current limits
-    performance: [],    // Speed, bandwidth, latency
-    physical: []        // Port count, connector type
-  };
-
-  // Communication protocols
-  if (requirements.communication?.spi) {
-    const mode = requirements.communication.spi.mode;
-    if (mode !== undefined) {
-      terms.protocols.push({
-        term: `SPI Mode ${mode}`,
-        meaning: `Protocol timing: CPOL/CPHA configuration`,
-        context: 'SPI protocol specification'
-      });
-    }
-    terms.interfaces.push('SPI');
-  }
-
-  if (requirements.communication?.i2c) {
-    const speed = requirements.communication.i2c.speed || 'standard';
-    terms.protocols.push({
-      term: `I2C ${speed}`,
-      meaning: `Bus speed: ${speed === 'fast' ? '400kHz' : '100kHz'}`,
-      context: 'I2C protocol specification'
-    });
-    terms.interfaces.push('I2C');
-  }
-
-  // Resources
-  if (requirements.hmi?.gpio) {
-    terms.resources.push({
-      term: `${requirements.hmi.gpio} GPIO`,
-      meaning: `${requirements.hmi.gpio} general-purpose I/O pins required`,
-      context: 'HMI requirements'
-    });
-  }
-
-  // Physical connectivity
-  if (requirements.connectivity?.port_count) {
-    terms.physical.push({
-      term: `${requirements.connectivity.port_count} USB port(s)`,
-      meaning: `Number of physical USB ports available on host`,
-      context: 'Physical connectivity constraint'
-    });
-  }
-
-  return terms;
-}
-```
+- If `communication.spi` is present: add `SPI Mode {mode}` to protocols (meaning: "Protocol timing: CPOL/CPHA configuration", context: "SPI protocol specification"); add "SPI" to interfaces.
+- If `communication.i2c` is present: add `I2C {speed}` to protocols (meaning: "Bus speed: 400kHz if fast, else 100kHz", context: "I2C protocol specification"); add "I2C" to interfaces. Default speed is "standard".
+- If `hmi.gpio` is present: add `{N} GPIO` to resources (meaning: "{N} general-purpose I/O pins required", context: "HMI requirements").
+- If `connectivity.port_count` is present: add `{N} USB port(s)` to physical (meaning: "Number of physical USB ports available on host", context: "Physical connectivity constraint").
 
 ### COMPONENT EXTRACTION
 
-Extract component names and families from each concept:
+Scan each concept file's text for component name patterns and assign families:
 
-```javascript
-function extractComponents(concept) {
-  const componentPatterns = [
-    { pattern: /FT\d{3,4}[A-Z]*/gi, family: 'FTDI USB Bridge' },
-    { pattern: /CH\d{3,4}[A-Z]*/gi, family: 'WCH USB Bridge' },
-    { pattern: /USB251\d|USB340\d/gi, family: 'Microchip USB Hub' },
-    { pattern: /STM32[A-Z]\d/gi, family: 'STM32 MCU' },
-    { pattern: /nRF\d{4,5}/gi, family: 'Nordic MCU' },
-    { pattern: /CP210\d/gi, family: 'Silicon Labs USB-UART' },
-    { pattern: /MCP2221/gi, family: 'Microchip USB-I2C/GPIO' }
-  ];
+| Pattern | Family |
+|---------|--------|
+| `FT` + 3-4 digits + optional letters (e.g., FT4222H) | FTDI USB Bridge |
+| `CH` + 3-4 digits + optional letters (e.g., CH347) | WCH USB Bridge |
+| `USB251x` or `USB340x` | Microchip USB Hub |
+| `STM32` + letter + digit | STM32 MCU |
+| `nRF` + 4-5 digits | Nordic MCU |
+| `CP210x` | Silicon Labs USB-UART |
+| `MCP2221` | Microchip USB-I2C/GPIO |
 
-  const components = [];
-  const content = concept.content;
-
-  componentPatterns.forEach(({ pattern, family }) => {
-    const matches = content.match(pattern) || [];
-    const unique = [...new Set(matches)];
-    unique.forEach(name => {
-      components.push({
-        name,
-        family,
-        configurations: getKnownConfigurations(name, family)
-      });
-    });
-  });
-
-  return components;
-}
-```
+For each match, deduplicate by name, then look up known configurations (see KNOWN CONFIGURATIONS DATABASE).
 
 ### KNOWN CONFIGURATIONS DATABASE
 
-Maintain database of known component configurations for common families:
+Use this database when looking up component configurations. For any component not listed, use: modes = [], note = "Configuration unknown - requires manual datasheet research."
 
-```javascript
-function getKnownConfigurations(componentName, family) {
-  const configDatabase = {
-    'FTDI USB Bridge': {
-      'FT4222H': {
-        modes: [
-          {
-            name: 'Mode 0',
-            registers: 'DCNF1=0, DCNF0=0',
-            provides: '4 GPIO (GPIO0-3), 1 SPI Master',
-            limitations: 'Single SPI channel'
-          },
-          {
-            name: 'Mode 1',
-            registers: 'DCNF1=0, DCNF0=1',
-            provides: '2 GPIO (GPIO2-3), 1 SPI Master with 2 additional CS',
-            limitations: 'GPIO0-1 become CS2-3'
-          },
-          {
-            name: 'Mode 2',
-            registers: 'DCNF1=1, DCNF0=0',
-            provides: '2 GPIO (GPIO2-3), 4 SPI Masters',
-            limitations: 'GPIO0-1 become additional SPI MISO/MOSI'
-          }
-        ],
-        protocols: {
-          spi_modes: [0, 1, 2, 3],
-          quad_spi: true,
-          max_clock_mhz: 40
-        }
-      },
-      'FT2232H': {
-        modes: [
-          {
-            name: 'UART',
-            provides: '2 independent UART channels'
-          },
-          {
-            name: 'FIFO',
-            provides: '1 parallel FIFO interface'
-          },
-          {
-            name: 'SPI',
-            provides: '2 SPI Master interfaces'
-          }
-        ]
-      }
-    },
-    'WCH USB Bridge': {
-      'CH347': {
-        modes: [
-          {
-            name: 'Mode 0',
-            provides: '2 UART + 1 SPI + 1 I2C + 8 GPIO',
-            limitations: 'All interfaces active simultaneously'
-          }
-        ],
-        protocols: {
-          spi_modes: [0, 1, 2, 3],
-          quad_spi: false,
-          max_clock_mhz: 60
-        }
-      }
-    }
-  };
+**FT4222H** (FTDI USB Bridge):
+- SPI modes supported: 0, 1, 2, 3 | Quad-SPI: yes | Max clock: 40 MHz
+- Mode 0 (DCNF1=0, DCNF0=0): provides 4 GPIO (GPIO0-3), 1 SPI Master | limitation: single SPI channel
+- Mode 1 (DCNF1=0, DCNF0=1): provides 2 GPIO (GPIO2-3), 1 SPI Master with 2 additional CS | limitation: GPIO0-1 become CS2-3
+- Mode 2 (DCNF1=1, DCNF0=0): provides 2 GPIO (GPIO2-3), 4 SPI Masters | limitation: GPIO0-1 become additional SPI MISO/MOSI
 
-  return configDatabase[family]?.[componentName] || {
-    modes: [],
-    note: 'Configuration unknown - requires manual datasheet research'
-  };
-}
-```
+**FT2232H** (FTDI USB Bridge):
+- UART mode: 2 independent UART channels
+- FIFO mode: 1 parallel FIFO interface
+- SPI mode: 2 SPI Master interfaces
+
+**CH347** (WCH USB Bridge):
+- SPI modes supported: 0, 1, 2, 3 | Quad-SPI: no | Max clock: 60 MHz
+- Mode 0: provides 2 UART + 1 SPI + 1 I2C + 8 GPIO | limitation: all interfaces active simultaneously
 
 ### TERMINOLOGY COLLISION DETECTION
 
-Identify when same term appears in requirements and component specs with potentially different meanings:
+For each protocol term in requirements, compare against each component's configuration mode names. Look for cases where the same word "Mode N" appears in both:
 
-```javascript
-function detectTerminologyCollisions(technicalTerms, components) {
-  const collisions = [];
+- If a requirement term contains "Mode {N}" and a component configuration mode is also named "Mode {N}", record a collision:
+  - Term: "Mode"
+  - Requirement: {term text}, meaning, context
+  - Component: "{component name} {mode name}", meaning = mode.provides, context = "Chip configuration mode"
+  - Severity: HIGH
+  - Risk: "Conflating protocol mode with chip configuration mode"
 
-  technicalTerms.protocols.forEach(reqTerm => {
-    components.forEach(component => {
-      // Check if component mentions same term
-      const componentModes = component.configurations.modes || [];
-      componentModes.forEach(mode => {
-        // Look for "Mode" collision
-        if (reqTerm.term.includes('Mode') && mode.name.includes('Mode')) {
-          const reqModeNum = reqTerm.term.match(/Mode (\d+)/)?.[1];
-          const compModeNum = mode.name.match(/Mode (\d+)/)?.[1];
-
-          if (reqModeNum === compModeNum) {
-            collisions.push({
-              term: 'Mode',
-              requirement: {
-                text: reqTerm.term,
-                meaning: reqTerm.meaning,
-                context: reqTerm.context
-              },
-              component: {
-                text: `${component.name} ${mode.name}`,
-                meaning: mode.provides,
-                context: `Chip configuration mode`
-              },
-              severity: 'HIGH',
-              risk: 'Conflating protocol mode with chip configuration mode'
-            });
-          }
-        }
-      });
-    });
-  });
-
-  return collisions;
-}
-```
+Return all detected collisions. An empty list means no collisions found.
 
 ### MAPPING TABLE GENERATION
 
-Create explicit requirement → component mapping for each concept:
+For each protocol, resource, and physical term extracted from requirements, map it against each component's capabilities:
 
-```javascript
-function createMappingTable(concept, technicalTerms, components) {
-  const mappings = [];
+**SPI Mode mapping:** If the requirement term is "SPI Mode {N}" and the component has SPI protocol support, check whether mode N is in the supported modes list.
+- `compatible` = true if mode N is in the supported list
+- `configuration_needed` = "SPI protocol register configuration (not chip mode)"
+- `notes` = "Set SPI_MODE register to {N}, independent of chip configuration mode"
 
-  // Map each requirement to component capabilities
-  [...technicalTerms.protocols, ...technicalTerms.resources, ...technicalTerms.physical].forEach(reqTerm => {
-    components.forEach(component => {
-      const mapping = mapRequirementToComponent(reqTerm, component);
-      if (mapping.relevant) {
-        mappings.push(mapping);
-      }
-    });
-  });
+**GPIO mapping:** If the requirement term is "{N} GPIO" and the component has chip modes, find the first chip mode that provides ≥ N GPIO pins.
+- `compatible` = true if a viable mode exists
+- `component_capability` = "{Mode Name}: {mode.provides}" or "Insufficient GPIO" if no viable mode
+- `configuration_needed` = the viable chip mode name, or "None"
+- `notes` = "Use chip {mode name} for {N} GPIO availability" or "Component cannot satisfy requirement"
 
-  return {
-    concept: concept.name,
-    mappings,
-    collisions: detectTerminologyCollisions(technicalTerms, components),
-    configuration: determineOptimalConfiguration(mappings, components)
-  };
-}
-
-function mapRequirementToComponent(reqTerm, component) {
-  // Example: Map "SPI Mode 1" to FT4222H capabilities
-  if (reqTerm.term.includes('SPI Mode')) {
-    const modeNum = parseInt(reqTerm.term.match(/Mode (\d+)/)?.[1]);
-    const supportedModes = component.configurations.protocols?.spi_modes || [];
-
-    return {
-      relevant: true,
-      requirement: reqTerm.term,
-      requirement_meaning: reqTerm.meaning,
-      component: component.name,
-      component_capability: `Supports SPI modes ${supportedModes.join(', ')}`,
-      compatible: supportedModes.includes(modeNum),
-      configuration_needed: 'SPI protocol register configuration (not chip mode)',
-      notes: `Set SPI_MODE register to ${modeNum}, independent of chip configuration mode`
-    };
-  }
-
-  // Example: Map "4 GPIO" to FT4222H modes
-  if (reqTerm.term.includes('GPIO')) {
-    const gpioCount = parseInt(reqTerm.term.match(/(\d+) GPIO/)?.[1]);
-    const modes = component.configurations.modes || [];
-
-    const viableModes = modes.filter(mode => {
-      const modeGpio = parseInt(mode.provides.match(/(\d+) GPIO/)?.[1] || '0');
-      return modeGpio >= gpioCount;
-    });
-
-    return {
-      relevant: true,
-      requirement: reqTerm.term,
-      requirement_meaning: reqTerm.meaning,
-      component: component.name,
-      component_capability: viableModes.length > 0 ? `${viableModes[0].name}: ${viableModes[0].provides}` : 'Insufficient GPIO',
-      compatible: viableModes.length > 0,
-      configuration_needed: viableModes.length > 0 ? viableModes[0].name : 'None',
-      notes: viableModes.length > 0 ? `Use chip ${viableModes[0].name} for ${gpioCount} GPIO availability` : 'Component cannot satisfy requirement'
-    };
-  }
-
-  return { relevant: false };
-}
-```
+Collect all relevant mappings into a table. Then run collision detection and configuration determination. Produce per-concept result: name, mappings list, collisions list, configuration spec.
 
 ### CONFIGURATION DETERMINATION
 
-Determine single chip configuration that satisfies all requirements:
+For each component, determine the single chip configuration that satisfies all compatible requirements:
 
-```javascript
-function determineOptimalConfiguration(mappings, components) {
-  const configurationsByComponent = {};
-
-  // Group mappings by component
-  components.forEach(component => {
-    const componentMappings = mappings.filter(m => m.component === component.name && m.compatible);
-
-    const requiredConfigs = componentMappings.map(m => m.configuration_needed);
-    const uniqueConfigs = [...new Set(requiredConfigs.filter(c => c !== 'SPI protocol register configuration (not chip mode)'))];
-
-    // Check if single chip config can satisfy all
-    if (uniqueConfigs.length === 0) {
-      // All requirements are protocol-level (registers), any chip mode works
-      configurationsByComponent[component.name] = {
-        chip_mode: component.configurations.modes[0]?.name || 'Default',
-        protocol_configs: requiredConfigs,
-        feasible: true,
-        notes: 'All requirements are protocol/register configurations, compatible with any chip mode'
-      };
-    } else if (uniqueConfigs.length === 1) {
-      // Single chip mode needed
-      configurationsByComponent[component.name] = {
-        chip_mode: uniqueConfigs[0],
-        protocol_configs: requiredConfigs.filter(c => c !== uniqueConfigs[0]),
-        feasible: true,
-        notes: `All requirements satisfied in ${uniqueConfigs[0]}`
-      };
-    } else {
-      // Multiple chip modes needed - CONFLICT
-      configurationsByComponent[component.name] = {
-        chip_mode: null,
-        protocol_configs: [],
-        feasible: false,
-        conflict: `Requires multiple chip modes: ${uniqueConfigs.join(', ')}. Can only use one mode at a time.`,
-        recommendation: 'Choose different component or revise requirements'
-      };
-    }
-  });
-
-  return configurationsByComponent;
-}
-```
+- Collect all `configuration_needed` values from compatible mappings for this component.
+- Exclude protocol-level configurations (e.g., "SPI protocol register configuration (not chip mode)") from the chip-mode count — these are register settings, not chip modes.
+- **0 unique chip modes needed:** All requirements are protocol/register configurations, compatible with any chip mode. Use the first available chip mode as default. Mark feasible = true. Notes: "All requirements are protocol/register configurations, compatible with any chip mode."
+- **1 unique chip mode needed:** Use that chip mode. Mark feasible = true. Notes: "All requirements satisfied in {mode name}."
+- **2+ unique chip modes needed:** CONFLICT — chip can only be in one mode at a time. Mark feasible = false. Record: "Requires multiple chip modes: {list}. Can only use one mode at a time." Recommendation: "Choose different component or revise requirements."
 
 ### OUTPUT GENERATION
 
@@ -1568,40 +1299,24 @@ ${Object.values(configuration).every(c => c.feasible) ? 'Concept ready for Phase
 
 ### COMPLETION SUMMARY
 
-After mapping all concepts:
+After mapping all concepts, display:
 
-```javascript
-console.log(`\nPhase 2.5 (Requirements-to-Component Mapping) complete.`);
-console.log(`Mapped: ${concepts.length} concepts`);
-console.log(`Collisions detected: ${totalCollisions}`);
-console.log(`Configuration conflicts: ${configConflicts}`);
-console.log(`\nMapping sections added to concept files.`);
-console.log(`\nNext: Run Phase 1 (Validation Gate) with explicit configuration specifications.`);
+```
+Phase 2.5 (Requirements-to-Component Mapping) complete.
+Mapped: {count} concepts
+Collisions detected: {totalCollisions}
+Configuration conflicts: {configConflicts}
+
+Mapping sections added to concept files.
+
+Next: Run Phase 3 (Validation Gate) with explicit configuration specifications.
 ```
 
 ### ERROR HANDLING
 
-**Missing requirements:**
-```javascript
-if (!fs.existsSync(requirementsPath)) {
-  throw new Error(`Requirements file not found: ${requirementsPath}. Run Phase 1 first.`);
-}
-```
-
-**Missing concept files:**
-```javascript
-if (conceptFiles.length === 0) {
-  throw new Error(`No concept files found. Run Phase 2 first.`);
-}
-```
-
-**Unknown component configurations:**
-```javascript
-if (component.configurations.note) {
-  console.warn(`⚠ ${component.name}: ${component.configurations.note}`);
-  console.warn(`  Manual datasheet research required for accurate mapping.`);
-}
-```
+- **Missing requirements:** If `.librespin/01-requirements/requirements.yaml` does not exist, stop with: "Requirements file not found. Run Phase 1 first."
+- **Missing concept files:** If no concept files found, stop with: "No concept files found. Run Phase 2 first."
+- **Unknown component configurations:** If a component has no known configuration (note field present), display: "⚠ {component name}: {note} — Manual datasheet research required for accurate mapping."
 
 ## PHASE 3: VALIDATION GATE
 
