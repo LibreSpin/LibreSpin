@@ -1334,41 +1334,18 @@ Filter architecture concepts by feasibility before expensive component research.
 
 Load validation threshold from config file:
 
-```javascript
-const yaml = require('js-yaml');
-const fs = require('fs');
-
-// Read configuration
-const configPath = '.librespin/config.yaml';
-const config = yaml.load(fs.readFileSync(configPath, 'utf8'), {
-  schema: yaml.FAILSAFE_SCHEMA
-});
-
-// Validate confidence_threshold
-const threshold = config.confidence_threshold;
-if (typeof threshold !== 'number' || threshold < 60 || threshold > 95) {
-  throw new Error(`Invalid confidence_threshold: ${threshold}. Must be integer 60-95. Check ${configPath}`);
-}
-
-console.log(`Validation threshold: ${threshold}%`);
-```
+- Read `.librespin/config.yaml` using YAML parser.
+- Extract `confidence_threshold` field.
+- Validate: must be a number between 60 and 95. If invalid, stop with error: `Invalid confidence_threshold: {value}. Must be integer 60-95. Check .librespin/config.yaml`
+- Log: `Validation threshold: {threshold}%`
 
 ### CONCEPT LOADING
 
 Load generated concepts from Phase 2:
 
-```javascript
-const conceptsDir = '.librespin/02-concepts/';
-const conceptFiles = fs.readdirSync(conceptsDir)
-  .filter(f => f.startsWith('concept-') && f.endsWith('.md'));
-
-if (conceptFiles.length === 0) {
-  throw new Error(`No concept files found in ${conceptsDir}. Run Phase 2 first.`);
-}
-
-console.log(`Validating ${conceptFiles.length} concepts...`);
-```
-
+- Read all files matching `concept-*.md` from `.librespin/02-concepts/`.
+- If no files found, stop with error: `No concept files found in .librespin/02-concepts/. Run Phase 2 first.`
+- Log: `Validating {N} concepts...`
 
 ### CONFIGURATION FEASIBILITY CHECK
 
@@ -1378,174 +1355,71 @@ For concepts with configurable components (chips with multiple modes, multi-func
 
 **1. Identify configurable components:**
 
-```javascript
-function identifyConfigurableComponents(concept) {
-  const configurablePatterns = [
-    { pattern: /FT\d{3,4}[A-Z]*/gi, type: 'FTDI bridge', modes: 'chip configuration modes' },
-    { pattern: /CH\d{3,4}[A-Z]*/gi, type: 'WCH bridge', modes: 'function modes' },
-    { pattern: /STM32.*|nRF.*|ESP.*/gi, type: 'MCU', modes: 'peripheral configurations' },
-    { pattern: /USB251\d|USB340\d/gi, type: 'USB hub', modes: 'port configurations' }
-  ];
-
-  const components = [];
-  configurablePatterns.forEach(({ pattern, type, modes }) => {
-    const matches = concept.content.match(pattern) || [];
-    matches.forEach(match => {
-      components.push({ name: match, type, modes });
-    });
-  });
-
-  return components;
-}
-```
+Scan concept content for these component families and note their configuration modes:
+- FT-series (e.g., FT232H, FT4232H): FTDI bridge — chip configuration modes
+- CH-series (e.g., CH343, CH9102): WCH bridge — function modes
+- STM32/nRF/ESP variants: MCU — peripheral configurations
+- USB251x/USB340x: USB hub — port configurations
 
 **2. Extract technical specification terms from requirements:**
 
-```javascript
-function extractTechnicalTerms(requirements) {
-  const terms = {
-    protocols: [],      // SPI Mode 1, I2C Fast Mode, UART 115200
-    interfaces: [],     // Quad-SPI, I2C, UART
-    resources: [],      // GPIO count, ADC channels, timers
-    electrical: [],     // Voltage levels, current limits
-    performance: []     // Speed, bandwidth, latency
-  };
-
-  // Extract from requirements YAML
-  if (requirements.communication) {
-    if (requirements.communication.spi) {
-      terms.protocols.push(`SPI Mode ${requirements.communication.spi.mode || 'unspecified'}`);
-      terms.interfaces.push('SPI');
-    }
-    if (requirements.communication.i2c) {
-      terms.protocols.push(`I2C ${requirements.communication.i2c.speed || 'unspecified'}`);
-      terms.interfaces.push('I2C');
-    }
-  }
-
-  if (requirements.hmi?.gpio) {
-    terms.resources.push(`${requirements.hmi.gpio} GPIO`);
-  }
-
-  return terms;
-}
-```
+From the requirements YAML, extract:
+- **protocols:** SPI mode (e.g., `SPI Mode 1`), I2C speed (e.g., `I2C Fast Mode`), UART baud rate
+- **interfaces:** Quad-SPI, I2C, UART (named identifiers)
+- **resources:** GPIO count, ADC channels, timer count
+- **electrical:** Voltage levels, current limits
+- **performance:** Speed, bandwidth, latency
 
 **3. Create requirement-to-component mapping:**
 
-For each configurable component, build explicit mapping table:
+For each configurable component, build an explicit mapping table with these fields:
+- `component`: part name
+- `requirements`: list of entries with `requirement`, `component_capability`, `configuration_needed`, `compatible` (boolean)
+- `configuration`: the single selected chip configuration
+- `feasible`: overall boolean
+- `conflicts`: list of incompatible requirement strings
 
-```javascript
-function createRequirementMapping(component, requirements, technicalTerms) {
-  const mapping = {
-    component: component.name,
-    requirements: [],
-    configuration: null,
-    feasible: true,
-    conflicts: []
-  };
-
-  // Map each requirement term to component capability
-  technicalTerms.protocols.forEach(term => {
-    const componentSupport = checkComponentSupport(component, term);
-    mapping.requirements.push({
-      requirement: term,
-      component_capability: componentSupport.capability,
-      configuration_needed: componentSupport.config,
-      compatible: componentSupport.compatible
-    });
-
-    if (!componentSupport.compatible) {
-      mapping.feasible = false;
-      mapping.conflicts.push(`${term} not supported by ${component.name}`);
-    }
-  });
-
-  // Determine single configuration that satisfies all requirements
-  mapping.configuration = determineOptimalConfiguration(component, mapping.requirements);
-
-  return mapping;
-}
-```
+Map each requirement term to component capability. If a requirement is not supported by the component, set `compatible = false` and add the conflict to `conflicts`.
 
 **4. Verify single-configuration feasibility:**
 
-```javascript
-function verifySingleConfiguration(mapping) {
-  // Check if all requirements can be satisfied in ONE chip configuration
-  const configs = mapping.requirements.map(r => r.configuration_needed);
-  const uniqueConfigs = [...new Set(configs)];
-
-  if (uniqueConfigs.length > 1) {
-    return {
-      feasible: false,
-      reason: `Requires multiple chip configurations: ${uniqueConfigs.join(', ')}. Can only use one configuration at a time.`,
-      recommendation: `Choose different component or revise requirements`
-    };
-  }
-
-  // Check for pin conflicts in chosen configuration
-  const pinConflicts = checkPinConflicts(mapping.configuration, mapping.requirements);
-  if (pinConflicts.length > 0) {
-    return {
-      feasible: false,
-      reason: `Pin conflicts in ${mapping.configuration}: ${pinConflicts.join(', ')}`,
-      recommendation: `Use chip configuration with non-conflicting pin assignments`
-    };
-  }
-
-  return {
-    feasible: true,
-    configuration: mapping.configuration,
-    reason: `All requirements satisfied in ${mapping.configuration}`
-  };
-}
-```
+- Collect all `configuration_needed` values from the requirements list.
+- If more than one unique configuration is required: infeasible — reason: `Requires multiple chip configurations: {list}. Can only use one configuration at a time.` Recommendation: `Choose different component or revise requirements`
+- Check for pin conflicts within the chosen configuration. If any: infeasible — reason: `Pin conflicts in {config}: {conflicts}` Recommendation: `Use chip configuration with non-conflicting pin assignments`
+- If no conflicts: feasible — reason: `All requirements satisfied in {config}`
 
 **5. Document mapping in concept file:**
 
-Add section BEFORE ## Validation:
+Add this section BEFORE `## Validation`:
 
 ```markdown
 ## Configuration Feasibility
 
-**Component:** ${component.name}
+**Component:** {component name}
 
 ### Requirement-to-Component Mapping
 
 | Requirement | Component Capability | Configuration | Compatible |
 |-------------|----------------------|---------------|------------|
-${mapping.requirements.map(r => `| ${r.requirement} | ${r.component_capability} | ${r.configuration_needed} | ${r.compatible ? '✅' : '❌'} |`).join('\n')}
+| {requirement} | {capability} | {config_needed} | ✅ or ❌ |
 
-**Selected Configuration:** ${mapping.configuration}
+**Selected Configuration:** {config}
 
-**Feasibility:** ${configCheck.feasible ? '✅ FEASIBLE' : '❌ INFEASIBLE'}
+**Feasibility:** ✅ FEASIBLE or ❌ INFEASIBLE
 
-**Rationale:** ${configCheck.reason}
+**Rationale:** {reason}
 
-${configCheck.feasible ? '' : `\n**Fix Required:** ${configCheck.recommendation}`}
+**Fix Required:** {recommendation}  ← only if infeasible
 ```
 
 **6. Fail concept if configuration infeasible:**
 
-```javascript
-const configCheck = verifySingleConfiguration(mapping);
-
-if (!configCheck.feasible) {
-  concept.validation_status = 'config_failed';
-  concept.confidenceScore = 0;
-  concept.failureReason = configCheck.reason;
-  concept.recommendation = configCheck.recommendation;
-
-  console.log(`❌ ${concept.name}: CONFIGURATION FAILURE`);
-  console.log(`   Component: ${component.name}`);
-  console.log(`   Reason: ${configCheck.reason}`);
-  console.log(`   Fix: ${configCheck.recommendation}`);
-
-  // Skip remaining validation for this concept
-  continue;
-}
-```
+If `configCheck.feasible` is false:
+- Set `concept.validation_status = 'config_failed'`
+- Set `concept.confidenceScore = 0`
+- Record `failureReason` and `recommendation`
+- Log the component name, reason, and fix
+- Skip all remaining validation steps for this concept
 
 This check runs BEFORE breaking assumption identification and dimension scoring.
 
@@ -1678,56 +1552,15 @@ Use WebSearch or WebFetch for research. **DO NOT fabricate sources or findings.*
 
 **Implementation:**
 
-```javascript
-async function verifyAssumptionWithHierarchy(assumption) {
-  const sourceHierarchy = [
-    { tier: 1, name: 'vendor_datasheets', confidence: 'high' },
-    { tier: 2, name: 'industry_standards', confidence: 'medium-high' },
-    { tier: 3, name: 'academic_papers', confidence: 'medium' },
-    { tier: 4, name: 'technical_forums', confidence: 'low' }
-  ];
+For each assumption, work through source tiers in order (highest reliability first). Stop at the first tier that produces a conclusive result:
+- Conclusive → record verdict ('validated' or 'invalidated'), confidence from that tier, and the tier number reached
+- All tiers inconclusive → verdict = 'inconclusive', confidence = 'none', tier_reached = 0
 
-  const findings = {
-    assumption: assumption.question,
-    sources: [],
-    verdict: null,
-    confidence: null,
-    tier_reached: null
-  };
-
-  // Try each tier in order (highest reliability first)
-  for (const tier of sourceHierarchy) {
-    const results = await searchTier(tier, assumption.keywords);
-
-    if (results.length > 0) {
-      findings.sources.push(...results.map(r => ({
-        ...r,
-        tier: tier.tier,
-        tier_name: tier.name
-      })));
-
-      // Analyze results from this tier
-      const analysis = analyzeResults(results, assumption);
-
-      if (analysis.isConclusive) {
-        findings.verdict = analysis.verdict; // 'validated' or 'invalidated'
-        findings.confidence = tier.confidence;
-        findings.tier_reached = tier.tier;
-        break; // Stop at first conclusive tier
-      }
-    }
-  }
-
-  // If no conclusive results from any tier
-  if (findings.verdict === null) {
-    findings.verdict = 'inconclusive';
-    findings.confidence = 'none';
-    findings.tier_reached = 0;
-  }
-
-  return findings;
-}
-```
+Tiers and their confidence levels:
+- Tier 1 (vendor_datasheets): 'high'
+- Tier 2 (industry_standards): 'medium-high'
+- Tier 3 (academic_papers): 'medium'
+- Tier 4 (technical_forums): 'low'
 
 ### SURGICAL SCORE ADJUSTMENT
 
@@ -1747,35 +1580,15 @@ After web research verification completes, adjust dimension scores based on find
 | Unexpected complexity discovered | Complexity | Decrease to 20-40 |
 | Requirements gap identified | Requirements Coverage | Decrease to 20-60 |
 
-**Implementation:**
+**Score adjustment logic:**
 
-```javascript
-function adjustScoreBasedOnResearch(initialScores, findings) {
-  const adjusted = { ...initialScores };
-  const log = [];
+For each research finding, apply to the affected dimension:
+- `verdict = 'validated'` AND `confidence = 'high'` → raise score to at least 80 (proficient/excellent)
+- `verdict = 'invalidated'` → cap score at 30 (poor/unacceptable)
+- `verdict = 'inconclusive'` → set score to 50 (average, reflects uncertainty)
+- No change if finding has no effect on a given dimension
 
-  findings.forEach(finding => {
-    const dim = finding.affects_dimension;
-    const oldScore = adjusted[dim];
-    let newScore = oldScore;
-
-    if (finding.verdict === 'validated' && finding.confidence === 'high') {
-      newScore = Math.max(oldScore, 80); // Move to proficient/excellent
-    } else if (finding.verdict === 'invalidated') {
-      newScore = Math.min(oldScore, 30); // Move to poor/unacceptable
-    } else if (finding.verdict === 'inconclusive') {
-      newScore = 50; // Move to average (reflects uncertainty)
-    }
-
-    if (newScore !== oldScore) {
-      adjusted[dim] = newScore;
-      log.push({ dim, oldScore, newScore, reason: finding.verdict });
-    }
-  });
-
-  return { adjusted, log };
-}
-```
+Log every adjustment: dimension, old score, new score, reason.
 
 **Update concept ## Validation section with adjusted scores:**
 
@@ -1804,105 +1617,25 @@ For each concept, check if system-level integration is physically possible:
 
 **1. Count USB devices:**
 
-```javascript
-function countUsbDevices(concept) {
-  const usbDevicePatterns = [
-    /USB.*bridge/gi,
-    /FT\d{3,4}[A-Z]*/gi,  // FTDI chips
-    /CH\d{3,4}[A-Z]*/gi,  // WCH chips
-    /CP210\d/gi,          // Silicon Labs
-    /MCP2221/gi,          // Microchip
-    /USB.*UART|USB.*SPI|USB.*I2C/gi
-  ];
-
-  let deviceCount = 0;
-  const content = concept.content.toLowerCase();
-  const devices = [];
-
-  // Count each USB bridge IC as 1 USB device
-  usbDevicePatterns.forEach(pattern => {
-    const matches = content.match(pattern) || [];
-    deviceCount += matches.length;
-    devices.push(...matches);
-  });
-
-  return {
-    count: deviceCount,
-    devices: devices
-  };
-}
-```
+Scan concept content for USB bridge IC patterns — count each match as one USB device:
+- USB bridge patterns: `USB.*bridge`, FTDI chips (FT-prefix), WCH chips (CH-prefix), Silicon Labs (CP210x), Microchip (MCP2221), USB-to-UART/SPI/I2C converters
 
 **2. Check hub requirement:**
 
-```javascript
-function checkTopologyFeasibility(concept, requirements) {
-  const usbDevices = countUsbDevices(concept);
-  const portsAvailable = requirements.connectivity?.port_count || 1;
+- If number of USB devices > ports available AND no USB hub is present in the BOM → infeasible: `{N} USB devices require {N}-port hub (or {N} ports), but concept has no hub and only {ports} port(s) available`. Recommendation: `Add USB hub IC (e.g., USB2514B, USB3340) to BOM`
+- If hub is present but has fewer ports than USB devices → infeasible: `{N} USB devices require {N}-port hub, but hub only has {hub_ports} ports`. Recommendation: `Use {N}-port hub or reduce USB device count`
+- If hub present with sufficient ports, or single USB device → feasible
 
-  // Check if hub is present in BOM/concept
-  const hasHub = /USB.*hub|hub.*USB|USB251\d|USB340\d/gi.test(concept.content);
-
-  if (usbDevices.count > portsAvailable && !hasHub) {
-    return {
-      feasible: false,
-      reason: `${usbDevices.count} USB devices require ${usbDevices.count}-port hub (or ${usbDevices.count} ports), but concept has no hub and only ${portsAvailable} port(s) available`,
-      recommendation: `Add USB hub IC (e.g., USB2514B, USB3340) to BOM`,
-      devices: usbDevices.devices
-    };
-  }
-
-  if (usbDevices.count > portsAvailable && hasHub) {
-    // Verify hub has enough ports
-    const hubPorts = extractHubPortCount(concept);
-    if (hubPorts && hubPorts < usbDevices.count) {
-      return {
-        feasible: false,
-        reason: `${usbDevices.count} USB devices require ${usbDevices.count}-port hub, but hub only has ${hubPorts} ports`,
-        recommendation: `Use ${usbDevices.count}-port hub or reduce USB device count`
-      };
-    }
-  }
-
-  return {
-    feasible: true,
-    reason: usbDevices.count <= 1 ? 'Single USB device, no hub needed' : `Hub present for ${usbDevices.count} USB devices`
-  };
-}
-
-function extractHubPortCount(concept) {
-  // Extract hub port count from part number or description
-  // Examples: "USB2514B" = 4-port, "USB3340" = 4-port
-  const hubMatch = concept.content.match(/USB(\d)(\d{2,3})[A-Z]?/i);
-  if (hubMatch) {
-    const portCount = parseInt(hubMatch[1], 10);
-    if (portCount >= 2 && portCount <= 7) {
-      return portCount;
-    }
-  }
-  return null; // Unknown port count
-}
-```
+Extract hub port count from part number: USB2514B = 4-port, USB3340 = 4-port (parse leading digit after "USB" if 2-7).
 
 **3. Fail concept immediately if topology infeasible:**
 
-```javascript
-const topologyCheck = checkTopologyFeasibility(concept, requirements);
-
-if (!topologyCheck.feasible) {
-  concept.validation_status = 'topology_failed';
-  concept.confidenceScore = 0;
-  concept.failureReason = topologyCheck.reason;
-  concept.recommendation = topologyCheck.recommendation;
-
-  console.log(`❌ ${concept.name}: TOPOLOGY FAILURE`);
-  console.log(`   Reason: ${topologyCheck.reason}`);
-  console.log(`   Fix: ${topologyCheck.recommendation}`);
-
-  // Skip remaining validation for this concept
-  continue;
-}
-```
+If topology check fails:
+- Set `concept.validation_status = 'topology_failed'`
+- Set `concept.confidenceScore = 0`
+- Record `failureReason` and `recommendation`
+- Log: concept name, reason, fix recommendation
+- Skip remaining validation for this concept
 
 **4. Document topology check in concept file:**
 
@@ -1911,13 +1644,12 @@ Add section to concept BEFORE ## Validation:
 ```markdown
 ## Physical Topology Check
 
-**USB Devices:** ${usbDevices.count}
-**Ports Available:** ${portsAvailable}
-**Hub Required:** ${usbDevices.count > portsAvailable ? 'YES' : 'NO'}
-**Hub Present:** ${hasHub ? 'YES' : 'NO'}
-**Topology Status:** ${topologyCheck.feasible ? '✅ FEASIBLE' : '❌ INFEASIBLE'}
-
-${topologyCheck.reason}
+**USB Devices:** {count}
+**Ports Available:** {ports}
+**Hub Required:** YES or NO
+**Hub Present:** YES or NO
+**Topology Status:** ✅ FEASIBLE or ❌ INFEASIBLE
+{topology reason}
 ```
 
 This check runs BEFORE dimension scoring. Non-feasible concepts score 0% and skip scoring entirely.
@@ -2026,96 +1758,24 @@ For each concept:
 4. Document scores in table format (no justifications - just scores)
 5. Calculate weighted confidence in next step
 
-**Implementation:**
+**Scoring rules per dimension:**
 
-```javascript
-// Evaluate concept against rubric
-const dimensionScores = {
-  requirements_coverage: evaluateRequirementsCoverage(concept, requirements),
-  technical_feasibility: evaluateTechnicalFeasibility(concept),
-  physical_topology: evaluatePhysicalTopology(concept, requirements),
-  part_availability: evaluatePartAvailability(concept),
-  cost: evaluateCost(concept),
-  complexity: evaluateComplexity(concept)
-};
+Evaluate `physical_topology` dimension:
+- Topology infeasible (from Physical Topology Check) → score 10
+- Single USB device, no hub needed → score 90
+- Multi-device with hub, hub correctly sized (ports ≥ device count) → score 90
+- Multi-device with hub, hub one port short → score 70
+- Multi-device with hub, hub clearly undersized → score 30
+- Multiple ports available, no hub (unusual) → score 70
+- Topology unclear → score 50
 
-// Each evaluation function returns tier score: 10, 30, 50, 70, or 90
-```
-
-**Physical Topology evaluation function:**
-
-```javascript
-function evaluatePhysicalTopology(concept, requirements) {
-  const topologyCheck = checkTopologyFeasibility(concept, requirements);
-
-  if (!topologyCheck.feasible) {
-    return 10; // Infeasible - critical failure
-  }
-
-  const usbDevices = countUsbDevices(concept);
-  const portsAvailable = requirements.connectivity?.port_count || 1;
-  const hasHub = /USB.*hub|hub.*USB|USB251\d|USB340\d/gi.test(concept.content);
-
-  // Single device, no hub needed
-  if (usbDevices.count === 1) {
-    return 90; // Excellent - simple topology
-  }
-
-  // Multi-device with properly sized hub
-  if (usbDevices.count > 1 && hasHub) {
-    const hubPorts = extractHubPortCount(concept);
-    if (hubPorts >= usbDevices.count) {
-      return 90; // Excellent - hub properly sized
-    } else if (hubPorts >= usbDevices.count - 1) {
-      return 70; // Good - marginal but viable
-    } else {
-      return 30; // Poor - hub undersized
-    }
-  }
-
-  // Multi-port available, no hub needed
-  if (usbDevices.count <= portsAvailable) {
-    return 70; // Good - viable but uncommon for embedded
-  }
-
-  return 50; // Average - unclear topology
-}
-```
-
-
-**Technical Feasibility evaluation function:**
-
-```javascript
-function evaluateTechnicalFeasibility(concept) {
-  let score = 90; // Start optimistic
-
-  // Check configuration feasibility
-  const configMapping = concept.configurationMapping;
-  if (!configMapping) {
-    score -= 10; // Configuration not specified
-  } else if (!configMapping.feasible) {
-    return 10; // Configuration infeasible - critical failure
-  } else if (configMapping.disambiguated === false) {
-    score -= 20; // Overloaded terms not disambiguated
-  }
-
-  // Check technical claims verification (existing logic)
-  const unverifiedClaims = countUnverifiedTechnicalClaims(concept);
-  if (unverifiedClaims > 3) {
-    score -= 20; // Many unknowns
-  } else if (unverifiedClaims > 1) {
-    score -= 10; // Some unknowns
-  }
-
-  // Check for reference designs
-  const hasReferenceDesign = /reference.*design|eval.*board|dev.*kit/gi.test(concept.content);
-  if (!hasReferenceDesign) {
-    score -= 10; // No proven starting point
-  }
-
-  return Math.max(10, score); // Floor at 10
-}
-```
+Evaluate `technical_feasibility` dimension (start at 90, apply deductions):
+- Configuration mapping absent → -10
+- Configuration mapping infeasible → return 10 immediately
+- Overloaded terms not disambiguated → -20
+- Unverified technical claims > 3 → -20; claims > 1 → -10
+- No reference design found → -10
+- Floor at 10.
 
 
 ### MCDA WEIGHTED CONFIDENCE CALCULATION
@@ -2132,63 +1792,29 @@ Where:
 ```
 
 **Weights:**
-```javascript
-const weights = {
-  requirements_coverage: 0.20,  // 20%
-  technical_feasibility: 0.25,  // 25%
-  physical_topology: 0.20,      // 20%
-  part_availability: 0.15,      // 15%
-  cost: 0.12,                   // 12%
-  complexity: 0.08              // 8%
-};
-```
 
-**Implementation:**
+| Dimension | Weight |
+|-----------|--------|
+| requirements_coverage | 0.20 (20%) |
+| technical_feasibility | 0.25 (25%) |
+| physical_topology | 0.20 (20%) |
+| part_availability | 0.15 (15%) |
+| cost | 0.12 (12%) |
+| complexity | 0.08 (8%) |
 
-```javascript
-function calculateWeightedConfidence(dimensionScores, weights) {
-  // Verify weights sum to 1.0
-  const weightSum = Object.values(weights).reduce((sum, w) => sum + w, 0);
-  if (Math.abs(weightSum - 1.0) > 0.01) {
-    throw new Error(`Weights must sum to 1.0, got ${weightSum}`);
-  }
-
-  // Apply additive model: V = Σ(Score_i × Weight_i)
-  const confidence =
-    (dimensionScores.requirements_coverage * weights.requirements_coverage) +
-    (dimensionScores.technical_feasibility * weights.technical_feasibility) +
-    (dimensionScores.physical_topology * weights.physical_topology) +
-    (dimensionScores.part_availability * weights.part_availability) +
-    (dimensionScores.cost * weights.cost) +
-    (dimensionScores.complexity * weights.complexity);
-
-  return Math.round(confidence * 10) / 10; // Round to 1 decimal place
-}
-```
+Verify weights sum to 1.0 before calculating. Apply additive model: multiply each score by its weight and sum all six products. Round result to 1 decimal place.
 
 **Example calculation (6 dimensions):**
 
-```javascript
-// Example scores
-const scores = {
-  requirements_coverage: 85,
-  technical_feasibility: 70,
-  physical_topology: 90,
-  part_availability: 90,
-  cost: 60,
-  complexity: 75
-};
-
-// Calculate
-const confidence =
-  (85 * 0.20) +  // 17.0
-  (70 * 0.25) +  // 17.5
-  (90 * 0.20) +  // 18.0 (physical topology)
-  (90 * 0.15) +  // 13.5
-  (60 * 0.12) +  // 7.2
-  (75 * 0.08);   // 6.0
-// = 79.2%
-```
+| Dimension | Score | Weight | Product |
+|-----------|-------|--------|---------|
+| requirements_coverage | 85 | 0.20 | 17.0 |
+| technical_feasibility | 70 | 0.25 | 17.5 |
+| physical_topology | 90 | 0.20 | 18.0 |
+| part_availability | 90 | 0.15 | 13.5 |
+| cost | 60 | 0.12 | 7.2 |
+| complexity | 75 | 0.08 | 6.0 |
+| **Total** | | | **79.2%** |
 
 **Add ## Validation section to each concept file:**
 
@@ -2217,42 +1843,15 @@ Apply validation gate based on calculated confidence scores.
 
 **Decision logic:**
 
-```javascript
-function applyValidationGate(concepts, threshold) {
-  const passed = [];
-  const failed = [];
-  const borderline = [];
+For each concept, classify by confidence vs. threshold:
 
-  concepts.forEach(concept => {
-    const confidence = concept.confidenceScore;
+| Condition | Classification | Status |
+|-----------|----------------|--------|
+| confidence ≥ threshold + 5 | Auto-pass | `auto_passed` |
+| threshold ≤ confidence < threshold + 5 | Borderline | `needs_approval` |
+| confidence < threshold | Auto-fail | `auto_failed` |
 
-    if (confidence >= threshold + 5) {
-      // Auto-pass: High confidence (≥85% if threshold=80)
-      passed.push({
-        ...concept,
-        validation_status: 'auto_passed',
-        reason: `High confidence (≥${threshold + 5}%)`
-      });
-    } else if (confidence >= threshold && confidence < threshold + 5) {
-      // Borderline: Request user approval (80-85% if threshold=80)
-      borderline.push({
-        ...concept,
-        validation_status: 'needs_approval',
-        reason: `Borderline confidence (${threshold}-${threshold + 5}%)`
-      });
-    } else {
-      // Auto-fail: Below threshold
-      failed.push({
-        ...concept,
-        validation_status: 'auto_failed',
-        reason: `Low confidence (${confidence.toFixed(1)}% < ${threshold}%)`
-      });
-    }
-  });
-
-  return { passed, failed, borderline };
-}
-```
+Example with threshold = 80: ≥85% = auto-pass, 80-85% = borderline, <80% = auto-fail.
 
 **Outcomes:**
 
@@ -2262,23 +1861,16 @@ function applyValidationGate(concepts, threshold) {
 
 **All concepts fail scenario:**
 
-If all concepts score <threshold:
-```javascript
-if (passed.length === 0 && borderline.length === 0) {
-  const highestScore = Math.max(...concepts.map(c => c.confidenceScore));
-  const highestConcept = concepts.find(c => c.confidenceScore === highestScore);
-
-  console.log(`All ${concepts.length} concepts failed validation (< ${threshold}% threshold).`);
-  console.log(`Highest score: ${highestConcept.name} (${highestScore.toFixed(1)}%)`);
-  console.log('\nRecommendations:');
-  console.log('1. Revise requirements to expand design space');
-  console.log(`2. Lower threshold to ${highestScore.toFixed(0)}% to proceed with best option`);
-  console.log('3. Return to Phase 2 with different architectural constraints');
-  console.log('4. Proceed with highest-scoring concept accepting higher risk');
-
-  // Request user decision
-}
-```
+If no concepts are auto-passed or borderline:
+- Find the highest-scoring concept (best fallback)
+- Report to user: `All {N} concepts failed validation (< {threshold}% threshold).`
+- Report highest scorer: `Highest score: {name} ({score}%)`
+- Present four options:
+  1. Revise requirements to expand design space
+  2. Lower threshold to `{highest_score}%` to proceed with best option
+  3. Return to Phase 2 with different architectural constraints
+  4. Proceed with highest-scoring concept accepting higher risk
+- Await user decision before continuing
 
 ### OUTPUT
 
@@ -2306,50 +1898,25 @@ if (passed.length === 0 && borderline.length === 0) {
 **User decision required for borderline concepts.**
 ```
 
-**3. Update state file** `.librespin/state.md` — set `phase` to `3-validation-gate`:
-
-```javascript
-const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
-const updatedState = existingState.replace(/^phase: .+$/m, `phase: '3-validation-gate'`);
-fs.writeFileSync('.librespin/state.md', updatedState);
-```
+**3. Update state file** `.librespin/state.md` — replace the `phase:` line value with `'3-validation-gate'`.
 
 ### ERROR HANDLING
 
-**Invalid configuration:**
-```javascript
-if (threshold < 60 || threshold > 95) {
-  throw new Error(`Invalid confidence_threshold: ${threshold}. Must be integer 60-95.`);
-}
-```
+**Invalid configuration:** If `confidence_threshold` is outside 60-95 range, stop immediately with: `Invalid confidence_threshold: {value}. Must be integer 60-95.`
 
-**Missing concept files:**
-```javascript
-if (conceptFiles.length === 0) {
-  throw new Error(`No concept files found. Run Phase 2 first.`);
-}
-```
+**Missing concept files:** If no `concept-*.md` files exist in `.librespin/02-concepts/`, stop with: `No concept files found. Run Phase 2 first.`
 
-**All concepts fail:**
-```javascript
-// Present options to user (see "All concepts fail scenario" above)
-```
+**All concepts fail:** Present options to user (see "All concepts fail scenario" above).
 
 ### COMPLETION SUMMARY
 
-After validation complete:
+After validation complete, report:
+- Total concepts evaluated
+- Counts for passed, borderline, and failed
+- Path to validation summary: `.librespin/03-validation/validation-summary.md`
+- If passing concepts exist: `Next: Run Phase 2 (Component Research) for passing concepts.`
+- If all failed: `All concepts failed validation. Review recommendations above.`
 
-```javascript
-console.log(`\nPhase 3 (Validation Gate) complete.`);
-console.log(`Evaluated: ${concepts.length} concepts`);
-console.log(`Passed: ${passed.length}, Borderline: ${borderline.length}, Failed: ${failed.length}`);
-console.log(`\nValidation summary: .librespin/03-validation/validation-summary.md`);
-if (passed.length > 0 || borderline.length > 0) {
-  console.log(`\nNext: Run Phase 2 (Component Research) for passing concepts.`);
-} else {
-  console.log(`\nAll concepts failed validation. Review recommendations above.`);
-}
-```
 
 ## PHASE 4: COMPONENT RESEARCH
 
