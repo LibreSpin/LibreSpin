@@ -120,3 +120,13 @@ Plans:
 | 7. NGSpice Simulation Skill | v0.2 | 2/2 | Complete   | 2026-04-08 |
 | 8. Installer Update | v0.2 | 1/1 | Complete   | 2026-04-08 |
 | 999.3. Distributor API Integration | v0.3 | 3/3 | Complete   | 2026-04-09 |
+
+### Phase 1000: Concept Skill JS-to-Prose
+
+**Goal:** Replace 3,267 lines of never-executed JavaScript pseudo-code in skills/concept/SKILL.md with concise prose instructions, reducing the file from 254KB to ~35KB. Pre-requisite for v0.1 ship — every concept invocation currently loads 3,267 JS lines that Claude reads but never executes.
+**Requirements**: TBD
+**Depends on:** None
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 1000 to break down)

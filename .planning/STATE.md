@@ -94,6 +94,7 @@ v0.2 roadmap decisions:
 ### Roadmap Evolution
 
 2026-04-08 — v0.2 roadmap created. 4 phases (5–8), 19 requirements mapped (CALC-01 through CALC-08, SIM-01 through SIM-10, PKG-07). Phase 5 spike precedes Phase 6 calcpad skill; Phase 7 simulate reads calcpad output; Phase 8 installer follows both skills.
+- Phase 1000 added (2026-04-09): Concept Skill JS-to-Prose — replace 3,267 lines of never-executed JavaScript with concise prose, targeting 254KB → ~35KB reduction. Pre-ship blocker for v0.1.
 
 ### Pending Todos
 
