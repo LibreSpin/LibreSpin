@@ -1924,6 +1924,8 @@ Select specific parts with part numbers for validated architecture concepts (tho
 
 ### API-FIRST RULE (MANDATORY — run this before any component research)
 
+Check `~/.librespin/credentials` for configured distributor APIs:
+
 ```bash
 CREDS_FILE="$HOME/.librespin/credentials"
 HAS_DIGIKEY=0; HAS_NEXAR=0; HAS_MOUSER=0
@@ -1962,78 +1964,21 @@ fi
 
 Load settings from config file:
 
-```javascript
-const yaml = require('js-yaml');
-const fs = require('fs');
-
-// Read configuration
-const configPath = '.librespin/config.yaml';
-const config = yaml.load(fs.readFileSync(configPath, 'utf8'), {
-  schema: yaml.FAILSAFE_SCHEMA
-});
-
-// Validate confidence_threshold (used to filter validated concepts)
-const threshold = config.confidence_threshold;
-if (typeof threshold !== 'number' || threshold < 60 || threshold > 95) {
-  throw new Error(`Invalid confidence_threshold: ${threshold}. Must be integer 60-95. Check ${configPath}`);
-}
-
-console.log(`Component research for concepts with confidence >= ${threshold}%`);
-```
+- Read `.librespin/config.yaml` using YAML parser.
+- Extract `confidence_threshold` field.
+- Validate: must be a number between 60 and 95. If invalid, stop with: `Invalid confidence_threshold: {value}. Must be integer 60-95. Check .librespin/config.yaml`
+- Log: `Component research for concepts with confidence >= {threshold}%`
 
 ### VALIDATED CONCEPT LOADING
 
 Load only concepts that passed Phase 1 validation:
 
-```javascript
-const conceptsDir = '.librespin/02-concepts/';
-const validationSummaryPath = '.librespin/03-validation/validation-summary.md';
-
-// Check validation summary exists
-if (!fs.existsSync(validationSummaryPath)) {
-  throw new Error(`Validation summary not found: ${validationSummaryPath}. Run Phase 1 first.`);
-}
-
-// Read all concept files
-const conceptFiles = fs.readdirSync(conceptsDir)
-  .filter(f => f.startsWith('concept-') && f.endsWith('.md'));
-
-if (conceptFiles.length === 0) {
-  throw new Error(`No concept files found in ${conceptsDir}. Run Phase 2 first.`);
-}
-
-// Filter to validated concepts only
-const validatedConcepts = [];
-
-conceptFiles.forEach(file => {
-  const content = fs.readFileSync(`${conceptsDir}/${file}`, 'utf8');
-
-  // Parse validation status from ## Validation section
-  const validationMatch = content.match(/validation_status:\s*['"]?(auto_passed|needs_approval)['"]?/i);
-  const confidenceMatch = content.match(/Confidence Score:\s*([\d.]+)%/);
-
-  if (validationMatch) {
-    const status = validationMatch[1];
-    const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]) : 0;
-
-    // Accept auto_passed (>=85%) or needs_approval (80-85%, user approved)
-    if (status === 'auto_passed' || status === 'needs_approval') {
-      validatedConcepts.push({
-        file,
-        status,
-        confidence,
-        content
-      });
-    }
-  }
-});
-
-if (validatedConcepts.length === 0) {
-  throw new Error(`No validated concepts found (>=${threshold}% confidence). Run Phase 1 first or lower threshold.`);
-}
-
-console.log(`Found ${validatedConcepts.length} validated concepts for component research.`);
-```
+- Check that `.librespin/03-validation/validation-summary.md` exists. If not, stop with: `Validation summary not found. Run Phase 1 first.`
+- Read all `concept-*.md` files from `.librespin/02-concepts/`. If none found, stop with: `No concept files found in .librespin/02-concepts/. Run Phase 2 first.`
+- For each concept file, parse the `## Validation` section for `validation_status`. Accept only `auto_passed` or `needs_approval`.
+- Also parse `Confidence Score:` to capture the numeric value.
+- If no validated concepts found, stop with: `No validated concepts found (>={threshold}% confidence). Run Phase 1 first or lower threshold.`
+- Log: `Found {N} validated concepts for component research.`
 
 ### CRITICAL: DATASHEET VERIFICATION PROTOCOL
 
@@ -2049,371 +1994,41 @@ console.log(`Found ${validatedConcepts.length} validated concepts for component 
 
 Extract all active components from requirements and concept architectures:
 
-```javascript
-function identifyDatasheetRequirements(requirements, concepts) {
-  const componentsNeedingDatasheets = new Set();
+- From requirements `interfaces.uart_channels`: any channel with `location = 'onboard'` → CRITICAL, reason: `Onboard device power requirements needed`
+- From concept block diagrams: extract bridge ICs (FT-series, CH-series, MCP-series, CY7C-series) → CRITICAL, reason: `SPI Mode 1 support, GPIO count, speed verification required`
+- USB hub ICs (USB-prefix pattern) → HIGH, reason: `Port count, power distribution, lifecycle verification`
+- Power ICs (LM-series, TPS-series, ADP-series) → CRITICAL, reason: `Input voltage range, output current, efficiency verification`
 
-  // From requirements: onboard devices
-  if (requirements.interfaces?.uart_channels) {
-    requirements.interfaces.uart_channels.forEach(channel => {
-      if (channel.location === 'onboard') {
-        componentsNeedingDatasheets.add({
-          name: channel.device,
-          type: 'uart_device',
-          criticality: 'CRITICAL',
-          reason: 'Onboard device power requirements needed'
-        });
-      }
-    });
-  }
-
-  // From concepts: bridge ICs, USB hubs, power ICs
-  concepts.forEach(concept => {
-    // Extract from block diagram or assumptions section
-    const blockDiagram = extractBlockDiagram(concept.content);
-
-    // USB-to-SPI/UART bridge ICs (CRITICAL)
-    const bridgeICs = blockDiagram.match(/FT\d+[A-Z]+|CH\d+[A-Z]+|MCP\d+|CY7C\d+/g);
-    if (bridgeICs) {
-      bridgeICs.forEach(ic => {
-        componentsNeedingDatasheets.add({
-          name: ic,
-          type: 'bridge_ic',
-          criticality: 'CRITICAL',
-          reason: 'SPI Mode 1 support, GPIO count, speed verification required'
-        });
-      });
-    }
-
-    // USB hubs (if present)
-    const hubICs = blockDiagram.match(/USB\d+[A-Z]*/g);
-    if (hubICs) {
-      hubICs.forEach(ic => {
-        componentsNeedingDatasheets.add({
-          name: ic,
-          type: 'usb_hub',
-          criticality: 'HIGH',
-          reason: 'Port count, power distribution, lifecycle verification'
-        });
-      });
-    }
-
-    // Power ICs (buck converters, LDOs)
-    const powerICs = blockDiagram.match(/LM\d+[A-Z]*|TPS\d+[A-Z]*|ADP\d+[A-Z]*/g);
-    if (powerICs) {
-      powerICs.forEach(ic => {
-        componentsNeedingDatasheets.add({
-          name: ic,
-          type: 'power_ic',
-          criticality: 'CRITICAL',
-          reason: 'Input voltage range, output current, efficiency verification'
-        });
-      });
-    }
-  });
-
-  return Array.from(componentsNeedingDatasheets);
-}
-
-const requiredDatasheets = identifyDatasheetRequirements(requirements, validatedConcepts);
-console.log(`Identified ${requiredDatasheets.length} components requiring datasheet verification.`);
-```
+Collect all identified components into a deduplicated list, noting name, type, and criticality.
 
 ---
 
 #### Step 2: Datasheet Retrieval and Parsing
 
-For each component, attempt to retrieve official manufacturer datasheet:
+For each component requiring a datasheet:
 
-```javascript
-async function retrieveAndParseDatasheet(component) {
-  console.log(`\n[DATASHEET] Retrieving: ${component.name}`);
-
-  // Step 2a: Search for official datasheet PDF
-  const datasheetSearch = await WebSearch({
-    query: `${component.name} datasheet PDF site:*.com filetype:pdf`
-  });
-
-  // Prioritize manufacturer domains (ti.com, ftdichip.com, microchip.com, etc.)
-  const manufacturerDomains = ['ti.com', 'ftdichip.com', 'microchip.com', 'onsemi.com',
-                               'analog.com', 'infineon.com', 'nxp.com', 'st.com'];
-
-  const datasheetURL = datasheetSearch.links.find(link =>
-    manufacturerDomains.some(domain => link.url.includes(domain)) &&
-    link.url.toLowerCase().includes('pdf')
-  );
-
-  if (!datasheetURL) {
-    console.warn(`⚠️  WARNING: No manufacturer datasheet found for ${component.name}`);
-    console.warn(`   Searched: ${datasheetSearch.query}`);
-    console.warn(`   ACTION REQUIRED: User must obtain datasheet manually`);
-    return {
-      component: component.name,
-      status: 'NOT_FOUND',
-      verified: false,
-      error: 'Manufacturer datasheet PDF not accessible via web search'
-    };
-  }
-
-  console.log(`[DATASHEET] Found: ${datasheetURL.url}`);
-
-  // Step 2b: Download PDF to local disk
-  const datasheetDir = '.librespin/04-component-research/datasheets';
-  const pdfFilename = `${component.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-  const pdfPath = `${datasheetDir}/${pdfFilename}`;
-  const txtPath = `${datasheetDir}/${pdfFilename}.txt`;
-
-  console.log(`[DATASHEET] Downloading to: ${pdfPath}`);
-
-  // Create datasheets directory if doesn't exist
-  await Bash({
-    command: `mkdir -p "${datasheetDir}"`,
-    description: 'Create datasheets directory'
-  });
-
-  // Download PDF using curl
-  const downloadResult = await Bash({
-    command: `curl -L -o "${pdfPath}" "${datasheetURL.url}"`,
-    description: `Download ${component.name} datasheet PDF`,
-    timeout: 30000  // 30 second timeout for large PDFs
-  });
-
-  if (downloadResult.exitCode !== 0) {
-    console.error(`   DOWNLOAD FAILED: ${downloadResult.stderr}`);
-    return {
-      component: component.name,
-      status: 'DOWNLOAD_FAILED',
-      url: datasheetURL.url,
-      verified: false,
-      error: `PDF download failed: ${downloadResult.stderr}`
-    };
-  }
-
-  // Verify PDF downloaded and has content
-  const pdfSizeResult = await Bash({
-    command: `stat -f%z "${pdfPath}" 2>/dev/null || stat -c%s "${pdfPath}" 2>/dev/null`,
-    description: 'Check PDF file size'
-  });
-
-  const pdfSize = parseInt(pdfSizeResult.stdout.trim());
-  if (pdfSize < 1000) {  // Less than 1KB likely indicates error page
-    console.error(`   DOWNLOAD FAILED: PDF too small (${pdfSize} bytes), likely error page`);
-    return {
-      component: component.name,
-      status: 'DOWNLOAD_FAILED',
-      url: datasheetURL.url,
-      verified: false,
-      error: `Downloaded file too small (${pdfSize} bytes), likely not actual datasheet`
-    };
-  }
-
-  console.log(`[DATASHEET] Downloaded: ${pdfSize} bytes`);
-
-  // Step 2c: Extract text from PDF using Python pdfplumber
-  console.log(`[DATASHEET] Extracting text from PDF...`);
-
-  const extractResult = await Bash({
-    command: `python3 -c "
-import sys
-try:
-    import pdfplumber
-except ImportError:
-    print('ERROR: pdfplumber not installed. Install with: pip3 install pdfplumber', file=sys.stderr)
-    sys.exit(1)
-
-pdf_path = '${pdfPath}'
-txt_path = '${txtPath}'
-
-try:
-    with pdfplumber.open(pdf_path) as pdf:
-        text = ''
-        for i, page in enumerate(pdf.pages):
-            text += f'\\n--- PAGE {i+1} ---\\n'
-            text += page.extract_text() or ''
-
-        with open(txt_path, 'w', encoding='utf-8') as f:
-            f.write(text)
-
-        print(f'Extracted {len(text)} characters from {len(pdf.pages)} pages')
-except Exception as e:
-    print(f'ERROR: {str(e)}', file=sys.stderr)
-    sys.exit(1)
-"`,
-    description: `Extract text from ${component.name} PDF using pdfplumber`,
-    timeout: 60000  // 60 second timeout for large PDFs
-  });
-
-  if (extractResult.exitCode !== 0) {
-    console.error(`   EXTRACTION FAILED: ${extractResult.stderr}`);
-
-    // If pdfplumber not installed, provide clear instructions
-    if (extractResult.stderr.includes('pdfplumber not installed')) {
-      console.error(`\n   ⚠️  CRITICAL: pdfplumber not installed`);
-      console.error(`      Install with: pip3 install pdfplumber`);
-      console.error(`      Or use alternative: pip3 install PyPDF2`);
-      throw new Error('pdfplumber required for PDF text extraction. Install with: pip3 install pdfplumber');
-    }
-
-    return {
-      component: component.name,
-      status: 'EXTRACTION_FAILED',
-      url: datasheetURL.url,
-      pdf_path: pdfPath,
-      verified: false,
-      error: `PDF text extraction failed: ${extractResult.stderr}`
-    };
-  }
-
-  console.log(`[DATASHEET] Extraction: ${extractResult.stdout.trim()}`);
-
-  // Step 2d: Read extracted text file
-  const datasheetContent = await Read({
-    file_path: txtPath
-  });
-
-  console.log(`[DATASHEET] Text file read: ${datasheetContent.split('\n').length} lines`);
-
-  return {
-    component: component.name,
-    status: 'RETRIEVED',
-    url: datasheetURL.url,
-    pdf_path: pdfPath,
-    txt_path: txtPath,
-    content: datasheetContent,
-    verified: false  // Not yet verified
-  };
-}
-
-// Retrieve all datasheets in parallel (with rate limiting)
-const datasheetPromises = requiredDatasheets.map(comp => retrieveAndParseDatasheet(comp));
-const retrievedDatasheets = await Promise.all(datasheetPromises);
-
-// Separate into retrieved vs not found
-const successfulRetrievals = retrievedDatasheets.filter(d => d.status === 'RETRIEVED');
-const failedRetrievals = retrievedDatasheets.filter(d => d.status === 'NOT_FOUND');
-
-console.log(`\n[DATASHEET] Retrieved: ${successfulRetrievals.length}/${requiredDatasheets.length}`);
-if (failedRetrievals.length > 0) {
-  console.error(`\n⚠️  CRITICAL: ${failedRetrievals.length} datasheets NOT FOUND:`);
-  failedRetrievals.forEach(d => console.error(`   - ${d.component}`));
-  console.error(`\n   ACTION: User must manually obtain datasheets for above components.`);
-  console.error(`   WORKFLOW: HALT until all datasheets retrieved.`);
-  throw new Error(`Cannot proceed without datasheets for: ${failedRetrievals.map(d => d.component).join(', ')}`);
-}
-```
+1. Search for the official manufacturer PDF: query `{component_name} datasheet PDF site:*.com filetype:pdf`
+2. Prioritize manufacturer domains (in order): ti.com, ftdichip.com, microchip.com, onsemi.com, analog.com, infineon.com, nxp.com, st.com
+3. If no manufacturer datasheet found: warn `WARNING: No manufacturer datasheet found for {component}. ACTION REQUIRED: User must obtain datasheet manually.` Return status `NOT_FOUND`.
+4. If found: download PDF to `.librespin/04-component-research/datasheets/{component_name}.pdf`
+5. Verify download: file must be ≥1KB. If smaller: status `DOWNLOAD_FAILED`, warn it's likely an error page.
+6. Extract text from PDF using `pdfplumber` (Python): `pip3 install pdfplumber` if not available. Write extracted text to `.librespin/04-component-research/datasheets/{component_name}.pdf.txt`
+7. If extraction fails due to missing pdfplumber: stop with `pdfplumber required for PDF text extraction. Install with: pip3 install pdfplumber`
+8. If all critical components retrieved: proceed. If any `NOT_FOUND`: halt with `Cannot proceed without datasheets for: {component_list}`
 
 ---
 
 #### Step 3: Datasheet Reading and Specification Extraction
 
-For each retrieved datasheet, extract critical specifications:
+For each retrieved datasheet, extract critical specifications by component type:
 
-```javascript
-function extractCriticalSpecifications(datasheet, componentType) {
-  const specs = {
-    component: datasheet.component,
-    datasheet_url: datasheet.url,
-    extracted_specs: {},
-    extraction_confidence: 0,
-    warnings: []
-  };
+**bridge_ic:** Extract SPI mode support (`SPI Mode 1` or `CPOL=0, CPHA=1`), GPIO count, max SPI speed in MHz/Mbps.
 
-  // Type-specific extraction
-  switch(componentType) {
-    case 'bridge_ic':
-      // SPI Mode support (CRITICAL)
-      const spiModeMatch = datasheet.content.match(/SPI.*(Mode|CPOL|CPHA)/gi);
-      if (spiModeMatch) {
-        specs.extracted_specs.spi_modes = spiModeMatch;
-        specs.extracted_specs.spi_mode_1_supported = datasheet.content.match(/Mode 1|CPOL=0.*CPHA=1/i) ? 'YES' : 'VERIFY';
-      } else {
-        specs.warnings.push('SPI mode information not found in extracted content');
-      }
+**uart_device / onboard_device:** Extract supply voltage (V), supply current (mA), output power (W) if applicable.
 
-      // GPIO count
-      const gpioMatch = datasheet.content.match(/(\d+).*GPIO/i);
-      if (gpioMatch) {
-        specs.extracted_specs.gpio_count = parseInt(gpioMatch[1]);
-      }
+**power_ic:** Extract input voltage range (min-max V), output current (mA/A), efficiency (%).
 
-      // Max SPI speed
-      const speedMatch = datasheet.content.match(/(\d+)\s*(MHz|Mbps).*SPI/i);
-      if (speedMatch) {
-        specs.extracted_specs.max_spi_speed = `${speedMatch[1]} ${speedMatch[2]}`;
-      }
-      break;
-
-    case 'uart_device':
-    case 'onboard_device':
-      // Supply voltage (CRITICAL)
-      const voltageMatch = datasheet.content.match(/Supply Voltage.*?(\d+\.?\d*)\s*V/i);
-      if (voltageMatch) {
-        specs.extracted_specs.supply_voltage = `${voltageMatch[1]}V`;
-      } else {
-        specs.warnings.push('CRITICAL: Supply voltage not found');
-      }
-
-      // Supply current (CRITICAL)
-      const currentMatch = datasheet.content.match(/Supply Current.*?(\d+\.?\d*)\s*(mA|A)/i);
-      if (currentMatch) {
-        specs.extracted_specs.supply_current = `${currentMatch[1]} ${currentMatch[2]}`;
-      } else {
-        specs.warnings.push('CRITICAL: Supply current not found');
-      }
-
-      // Output power (for power calculation sanity check)
-      const powerMatch = datasheet.content.match(/Output Power.*?(\d+\.?\d*)\s*W/i);
-      if (powerMatch) {
-        specs.extracted_specs.output_power = `${powerMatch[1]}W`;
-      }
-      break;
-
-    case 'power_ic':
-      // Input voltage range
-      const vinMatch = datasheet.content.match(/Input Voltage.*?(\d+\.?\d*)\s*-\s*(\d+\.?\d*)\s*V/i);
-      if (vinMatch) {
-        specs.extracted_specs.input_voltage_range = `${vinMatch[1]}-${vinMatch[2]}V`;
-      }
-
-      // Output current
-      const ioutMatch = datasheet.content.match(/Output Current.*?(\d+\.?\d*)\s*(mA|A)/i);
-      if (ioutMatch) {
-        specs.extracted_specs.output_current = `${ioutMatch[1]} ${ioutMatch[2]}`;
-      }
-
-      // Efficiency
-      const effMatch = datasheet.content.match(/Efficiency.*?(\d+)%/i);
-      if (effMatch) {
-        specs.extracted_specs.efficiency = `${effMatch[1]}%`;
-      }
-      break;
-  }
-
-  // Calculate extraction confidence (0-100%)
-  const expectedFields = {
-    'bridge_ic': ['spi_modes', 'gpio_count', 'max_spi_speed'],
-    'uart_device': ['supply_voltage', 'supply_current'],
-    'power_ic': ['input_voltage_range', 'output_current']
-  };
-
-  const expected = expectedFields[componentType] || [];
-  const extracted = Object.keys(specs.extracted_specs);
-  specs.extraction_confidence = (extracted.length / expected.length) * 100;
-
-  if (specs.extraction_confidence < 80) {
-    specs.warnings.push(`LOW EXTRACTION CONFIDENCE: ${specs.extraction_confidence}% (expected ${expected.length} fields, found ${extracted.length})`);
-  }
-
-  return specs;
-}
-
-const extractedSpecs = successfulRetrievals.map(ds => {
-  const componentType = requiredDatasheets.find(c => c.name === ds.component)?.type;
-  return extractCriticalSpecifications(ds, componentType);
-});
-
-console.log(`\n[SPECS] Extracted specifications from ${extractedSpecs.length} datasheets.`);
-```
+After extraction, calculate extraction confidence: number of expected fields extracted / total expected fields × 100%. Warn if confidence < 80%.
 
 ---
 
@@ -2421,217 +2036,50 @@ console.log(`\n[SPECS] Extracted specifications from ${extractedSpecs.length} da
 
 Before verification, perform physics-based sanity checks:
 
-```javascript
-function sanityCheckElectricalSpecs(specs) {
-  const failures = [];
+- **Onboard device with output power:** Verify supply current ≥ (output_power / supply_voltage / 0.85) × 1000 mA (allow 50% margin). If current is too low: CRITICAL failure — `Supply current {value}mA too low for {power}W output`
+- **Power IC:** Verify that the source voltage (from requirements, e.g., 24V DC) falls within the IC's input voltage range. If outside: CRITICAL failure — `Source voltage {V}V outside IC range {min}-{max}V`
 
-  // For onboard devices with output power: verify supply current makes sense
-  if (specs.extracted_specs.output_power && specs.extracted_specs.supply_current) {
-    const outputPower = parseFloat(specs.extracted_specs.output_power);
-    const supplyCurrent = parseFloat(specs.extracted_specs.supply_current);
-    const supplyVoltage = parseFloat(specs.extracted_specs.supply_voltage);
-
-    // Minimum supply current = output power / supply voltage / efficiency (assume 85%)
-    const minSupplyCurrent = (outputPower / supplyVoltage / 0.85) * 1000; // in mA
-
-    if (supplyCurrent < minSupplyCurrent * 0.5) {  // Allow 50% margin for error
-      failures.push({
-        component: specs.component,
-        check: 'supply_current_vs_output_power',
-        issue: `Supply current ${supplyCurrent}mA too low for ${outputPower}W output`,
-        calculation: `Minimum: ${outputPower}W / ${supplyVoltage}V / 0.85 = ${minSupplyCurrent.toFixed(0)}mA`,
-        severity: 'CRITICAL'
-      });
-    }
-  }
-
-  // For power ICs: verify input voltage range includes source voltage
-  if (specs.extracted_specs.input_voltage_range) {
-    const sourceVoltage = 24; // From requirements (24V DC input)
-    const vinRange = specs.extracted_specs.input_voltage_range.match(/(\d+)-(\d+)V/);
-    if (vinRange) {
-      const vinMin = parseFloat(vinRange[1]);
-      const vinMax = parseFloat(vinRange[2]);
-
-      if (sourceVoltage < vinMin || sourceVoltage > vinMax) {
-        failures.push({
-          component: specs.component,
-          check: 'input_voltage_compatibility',
-          issue: `Source voltage ${sourceVoltage}V outside IC range ${vinMin}-${vinMax}V`,
-          severity: 'CRITICAL'
-        });
-      }
-    }
-  }
-
-  return failures;
-}
-
-const sanityCheckFailures = extractedSpecs.flatMap(spec => sanityCheckElectricalSpecs(spec));
-
-if (sanityCheckFailures.length > 0) {
-  console.error(`\n⚠️  SANITY CHECK FAILURES: ${sanityCheckFailures.length} issues detected`);
-  sanityCheckFailures.forEach(failure => {
-    console.error(`   [${failure.severity}] ${failure.component}: ${failure.issue}`);
-    if (failure.calculation) console.error(`      Calculation: ${failure.calculation}`);
-  });
-
-  // CRITICAL failures halt workflow
-  const criticalFailures = sanityCheckFailures.filter(f => f.severity === 'CRITICAL');
-  if (criticalFailures.length > 0) {
-    throw new Error(`CRITICAL sanity check failures detected. Cannot proceed with invalid specifications.`);
-  }
-}
-```
+CRITICAL failures halt the workflow: `CRITICAL sanity check failures detected. Cannot proceed with invalid specifications.`
 
 ---
 
 #### Step 5: Spawn Verifier Agent
 
-For each datasheet, spawn a specialized verifier agent to confirm understanding:
+For each datasheet with extracted specs, spawn a verifier agent to confirm understanding:
 
-```javascript
-async function verifyDatasheetUnderstanding(datasheetSpecs) {
-  console.log(`\n[VERIFY] Spawning verifier agent for: ${datasheetSpecs.component}`);
-
-  const verifierPrompt = `You are a datasheet verification agent. Your task is to verify the extracted specifications for ${datasheetSpecs.component} are correct and complete.
-
-DATASHEET URL: ${datasheetSpecs.datasheet_url}
-EXTRACTED SPECIFICATIONS:
-${JSON.stringify(datasheetSpecs.extracted_specs, null, 2)}
-
-EXTRACTION WARNINGS:
-${datasheetSpecs.warnings.join('\n')}
-
-VERIFICATION TASKS:
-1. Access the datasheet at the URL above
-2. Locate the "Absolute Maximum Ratings" and "Electrical Characteristics" tables
-3. Verify each extracted specification matches the datasheet
-4. Identify any missing CRITICAL specifications
-5. Flag any discrepancies between extracted values and datasheet
-
-CRITICAL SPECIFICATIONS (must verify):
-- Supply voltage (exact value with min/typ/max)
-- Supply current (typ and max values)
-- Operating temperature range
-- Key functional parameters (SPI modes for bridge ICs, output current for power ICs)
-
-OUTPUT FORMAT:
-{
-  "component": "${datasheetSpecs.component}",
-  "verified": true/false,
-  "verification_confidence": 0-100,
-  "discrepancies": [
-    {"field": "...", "extracted": "...", "datasheet": "...", "severity": "CRITICAL/HIGH/LOW"}
-  ],
-  "missing_critical_specs": ["...", "..."],
-  "datasheet_section_references": {
-    "supply_voltage": "Table 1, page 5",
-    "supply_current": "Table 2, page 6"
-  }
-}`;
-
-  const verifierAgent = await Agent({
-    subagent_type: 'general-purpose',
-    description: `Verify ${datasheetSpecs.component} datasheet specs`,
-    prompt: verifierPrompt
-  });
-
-  return JSON.parse(verifierAgent.output);
-}
-
-// Verify all datasheets sequentially (to avoid rate limits)
-const verificationResults = [];
-for (const specs of extractedSpecs) {
-  const verification = await verifyDatasheetUnderstanding(specs);
-  verificationResults.push(verification);
-
-  if (!verification.verified) {
-    console.error(`\n❌ VERIFICATION FAILED: ${specs.component}`);
-    console.error(`   Confidence: ${verification.verification_confidence}%`);
-    if (verification.discrepancies.length > 0) {
-      console.error(`   Discrepancies:`);
-      verification.discrepancies.forEach(d => {
-        console.error(`      - ${d.field}: Extracted "${d.extracted}" vs Datasheet "${d.datasheet}" (${d.severity})`);
-      });
-    }
-  } else {
-    console.log(`✅ VERIFIED: ${specs.component} (${verification.verification_confidence}% confidence)`);
-  }
-}
-
-// Check for verification failures
-const failedVerifications = verificationResults.filter(v => !v.verified || v.verification_confidence < 80);
-if (failedVerifications.length > 0) {
-  console.error(`\n⚠️  ${failedVerifications.length} components failed verification:`);
-  failedVerifications.forEach(v => console.error(`   - ${v.component} (${v.verification_confidence}% confidence)`));
-  throw new Error(`Datasheet verification failed for ${failedVerifications.length} components. Cannot proceed.`);
-}
-```
+- Agent receives: datasheet URL, extracted specs (JSON), extraction warnings
+- Agent tasks: access the datasheet URL, locate Absolute Maximum Ratings and Electrical Characteristics tables, verify each extracted spec, identify missing CRITICAL specs, flag discrepancies
+- Agent returns: `verified` (boolean), `verification_confidence` (0-100), `discrepancies` list (field, extracted, datasheet, severity), `missing_critical_specs` list, `datasheet_section_references` map
+- Accept: `verified = true` AND `verification_confidence >= 80`
+- Reject: failed verifications or confidence < 80 → stop with `Datasheet verification failed for {N} components. Cannot proceed.`
 
 ---
 
 #### Step 6: Document Verified Specifications
 
-Create verification matrix documenting ground truth:
+Create `.librespin/04-component-research/datasheet-verification-matrix.md` with this structure per component:
 
-```javascript
-function generateVerificationMatrix(verificationResults, extractedSpecs) {
-  let matrix = `# Datasheet Verification Matrix\n\n`;
-  matrix += `**Generated:** ${new Date().toISOString()}\n`;
-  matrix += `**Components Verified:** ${verificationResults.length}\n\n`;
-  matrix += `---\n\n`;
+```markdown
+## {Component Name}
 
-  verificationResults.forEach((verification, idx) => {
-    const specs = extractedSpecs[idx];
+**Datasheet:** [{Component} Datasheet]({url})
+**Verification Confidence:** {N}%
+**Status:** ✅ VERIFIED or ❌ FAILED
 
-    matrix += `## ${verification.component}\n\n`;
-    matrix += `**Datasheet:** [${verification.component} Datasheet](${specs.datasheet_url})\n`;
-    matrix += `**Verification Confidence:** ${verification.verification_confidence}%\n`;
-    matrix += `**Status:** ${verification.verified ? '✅ VERIFIED' : '❌ FAILED'}\n\n`;
+### Verified Specifications
 
-    matrix += `### Verified Specifications\n\n`;
-    matrix += `| Specification | Value | Datasheet Reference |\n`;
-    matrix += `|---------------|-------|---------------------|\n`;
+| Specification | Value | Datasheet Reference |
+|---------------|-------|---------------------|
+| {spec name} | {value} | {table/page reference} |
 
-    Object.entries(specs.extracted_specs).forEach(([key, value]) => {
-      const reference = verification.datasheet_section_references?.[key] || 'See datasheet';
-      matrix += `| ${key.replace(/_/g, ' ')} | ${value} | ${reference} |\n`;
-    });
+### ⚠️ Discrepancies Found
+- **{field}:** Extracted "{extracted}" vs Datasheet "{actual}" ({severity})
 
-    if (verification.discrepancies && verification.discrepancies.length > 0) {
-      matrix += `\n### ⚠️ Discrepancies Found\n\n`;
-      verification.discrepancies.forEach(d => {
-        matrix += `- **${d.field}:** Extracted "${d.extracted}" vs Datasheet "${d.datasheet}" (${d.severity})\n`;
-      });
-    }
-
-    if (verification.missing_critical_specs && verification.missing_critical_specs.length > 0) {
-      matrix += `\n### ⚠️ Missing Critical Specifications\n\n`;
-      verification.missing_critical_specs.forEach(spec => {
-        matrix += `- ${spec}\n`;
-      });
-    }
-
-    matrix += `\n---\n\n`;
-  });
-
-  return matrix;
-}
-
-const verificationMatrix = generateVerificationMatrix(verificationResults, extractedSpecs);
-
-// Write verification matrix to file
-fs.writeFileSync(
-  '.librespin/04-component-research/datasheet-verification-matrix.md',
-  verificationMatrix
-);
-
-console.log(`\n✅ DATASHEET VERIFICATION COMPLETE`);
-console.log(`   Verified: ${verificationResults.length} components`);
-console.log(`   Matrix: .librespin/04-component-research/datasheet-verification-matrix.md`);
-console.log(`\n   GROUND TRUTH ESTABLISHED. Proceeding to component selection...\n`);
+### ⚠️ Missing Critical Specifications
+- {spec name}
 ```
+
+Log: `GROUND TRUTH ESTABLISHED. Proceeding to component selection...`
 
 ---
 
@@ -2639,59 +2087,22 @@ console.log(`\n   GROUND TRUTH ESTABLISHED. Proceeding to component selection...
 
 For each validated concept, extract component categories from block diagram:
 
-```javascript
-function extractFunctionalBlocks(conceptContent) {
-  const blocks = {
-    active: [],      // MCUs, wireless modules, sensor ICs, power ICs - require MPN
-    commodity: []    // Resistors, capacitors, connectors - generic spec only
-  };
+**Active components** (require specific MPN): detect these patterns in concept content:
+- MCU / Microcontroller / Cortex → category: MCU
+- BLE / Bluetooth / Wireless / LoRa / WiFi / Zigbee / Cellular → category: Wireless
+- Sensor / IMU / Accelerometer / Gyro / Temp / Humidity / Pressure → category: Sensor
+- Buck / Boost / LDO / PMIC / Regulator / Power IC → category: Power IC
+- Motor Driver / Gate Driver / H-Bridge → category: Motor Driver
+- ADC / DAC / Op-Amp / Comparator → category: Analog IC
+- Flash / EEPROM / FRAM / Memory → category: Memory
 
-  // Parse block diagram section
-  const diagramMatch = conceptContent.match(/## Block Diagram[\s\S]*?```[\s\S]*?```/);
-  const diagram = diagramMatch ? diagramMatch[0] : '';
-
-  // Active component detection patterns
-  const activePatterns = [
-    { pattern: /MCU|Microcontroller|Cortex/i, category: 'MCU' },
-    { pattern: /BLE|Bluetooth|Wireless|LoRa|WiFi|Zigbee|Cellular/i, category: 'Wireless' },
-    { pattern: /Sensor|IMU|Accelerometer|Gyro|Temp|Humidity|Pressure/i, category: 'Sensor' },
-    { pattern: /Buck|Boost|LDO|PMIC|Regulator|Power IC/i, category: 'Power IC' },
-    { pattern: /Motor Driver|Gate Driver|H-Bridge/i, category: 'Motor Driver' },
-    { pattern: /ADC|DAC|Op-Amp|Comparator/i, category: 'Analog IC' },
-    { pattern: /Flash|EEPROM|FRAM|Memory/i, category: 'Memory' }
-  ];
-
-  // Commodity component detection patterns
-  const commodityPatterns = [
-    { pattern: /Resistor|(\d+[kK]?Ω)|(\d+R)/i, category: 'Resistor' },
-    { pattern: /Capacitor|(\d+[nupμ]F)/i, category: 'Capacitor' },
-    { pattern: /Inductor|(\d+[nupμ]H)/i, category: 'Inductor' },
-    { pattern: /LED|Status LED/i, category: 'LED' },
-    { pattern: /Connector|JST|Header|USB/i, category: 'Connector' },
-    { pattern: /Crystal|Oscillator/i, category: 'Crystal' }
-  ];
-
-  // Extract active components
-  activePatterns.forEach(({ pattern, category }) => {
-    if (pattern.test(conceptContent)) {
-      if (!blocks.active.includes(category)) {
-        blocks.active.push(category);
-      }
-    }
-  });
-
-  // Extract commodity components
-  commodityPatterns.forEach(({ pattern, category }) => {
-    if (pattern.test(conceptContent)) {
-      if (!blocks.commodity.includes(category)) {
-        blocks.commodity.push(category);
-      }
-    }
-  });
-
-  return blocks;
-}
-```
+**Commodity components** (generic spec only, no MPN):
+- Resistor / Ω values → category: Resistor
+- Capacitor / F values → category: Capacitor
+- Inductor / H values → category: Inductor
+- LED / Status LED → category: LED
+- Connector / JST / Header / USB → category: Connector
+- Crystal / Oscillator → category: Crystal
 
 ### DIGIKEY PARAMETRIC SEARCH WORKFLOW
 
@@ -2704,59 +2115,34 @@ Example: Integrated Circuits > Embedded - Microcontrollers
 ```
 
 **Step 2: Apply Filters from Requirements**
-```javascript
-// Parametric search pattern (manual via web interface)
-const searchParams = {
-  category: "Microcontrollers",
-  filters: {
-    "Core Processor": requirements.mcu_core,           // e.g., "ARM Cortex-M4"
-    "Program Memory Size": `>= ${requirements.flash}`, // e.g., ">= 256KB"
-    "RAM Size": `>= ${requirements.ram}`,              // e.g., ">= 64KB"
-    "Speed": `>= ${requirements.mhz}`,                 // e.g., ">= 100MHz"
-    "Operating Temperature": requirements.tempRange,   // e.g., "-40°C ~ 85°C"
-    "Supplier Device Package": requirements.package    // e.g., "LQFP-64"
-  }
-};
-```
+
+Set parametric filters matching requirements:
+- Core Processor (e.g., ARM Cortex-M4)
+- Program Memory Size (e.g., >= 256KB)
+- RAM Size (e.g., >= 64KB)
+- Speed (e.g., >= 100MHz)
+- Operating Temperature (e.g., -40°C ~ 85°C)
+- Supplier Device Package (e.g., LQFP-64)
 
 **Step 3: Filter by Availability**
-```javascript
-const availabilityFilters = {
-  "Stock Status": "In Stock",           // OR "Normally Stocking"
-  "Lifecycle Status": "Active"          // CRITICAL: avoid NRND
-};
 
-// Additional availability criteria
-const availabilityCriteria = {
-  leadTimeWeeks: 8,       // Max acceptable lead time
-  stockQuantity: 100      // Min acceptable stock
-};
-```
+Apply these availability criteria:
+- Stock Status: "In Stock" or "Normally Stocking"
+- Lifecycle Status: "Active" (CRITICAL — avoid NRND)
+- Lead Time: ≤8 weeks maximum
+- Minimum Stock Quantity: ≥100 units
 
 **Step 4: Sort by Price or Quantity**
-```
-Sort by: Price (ascending) for cost optimization
-     OR: Quantity Available (descending) for availability
-```
+
+Sort ascending by price for cost optimization, or descending by quantity available for reliability.
 
 **Step 5: Extract Top 5-10 Candidates**
-```javascript
-// Extract key fields from search results
-const candidateFields = [
-  'Manufacturer Part Number',
-  'Manufacturer',
-  'Description',
-  'Unit Price (USD)',
-  'Quantity Available',
-  'Lead Time',
-  'Lifecycle Status',
-  'Datasheet URL'
-];
-```
+
+For each candidate, record: Manufacturer Part Number, Manufacturer, Description, Unit Price (USD), Quantity Available, Lead Time, Lifecycle Status, Datasheet URL.
 
 ### BALANCED SCORECARD EVALUATION
 
-Score candidate parts using weighted criteria (per CONTEXT.md decisions):
+Score candidate parts using weighted criteria:
 
 **Weights:**
 - Cost: 35%
@@ -2774,161 +2160,42 @@ Score candidate parts using weighted criteria (per CONTEXT.md decisions):
 | 2 | $15-30 | 10-50 stock, <8 wk | Meets most, minor gaps | Lesser-known vendor |
 | 1 | >$30 | <10 stock, >8 wk | Does not meet specs | Unknown vendor |
 
-**Implementation:**
+**Score each dimension (1-5 scale):**
 
-```javascript
-function evaluateComponent(part, requirements) {
-  // Weights from CONTEXT.md decisions
-  const weights = {
-    cost: 0.35,
-    availability: 0.30,
-    features: 0.25,
-    vendor: 0.10
-  };
+Cost:
+- <$1 → 5, $1-$5 → 4, $5-$15 → 3, $15-$30 → 2, >$30 → 1
 
-  // Score each dimension (1-5 scale)
-  const scores = {
-    cost: scoreCost(part.unitPrice),
-    availability: scoreAvailability(part.stock, part.leadTimeWeeks),
-    features: scoreFeatures(part.specs, requirements),
-    vendor: scoreVendor(part.manufacturer)
-  };
+Availability (based on stock count and lead time):
+- >1000 units AND ≤2 wk → 5
+- 100-1000 AND ≤4 wk → 4
+- 50-100 AND ≤6 wk → 3
+- 10-50 AND ≤8 wk → 2
+- <10 OR >8 wk → 1
 
-  // Calculate weighted total
-  const totalScore =
-    (scores.cost * weights.cost) +
-    (scores.availability * weights.availability) +
-    (scores.features * weights.features) +
-    (scores.vendor * weights.vendor);
+Features (compare part specs to requirements):
+- Start at 3 (meets requirements baseline)
+- Flash >1.5× required → +0.5, RAM >1.5× required → +0.5, Speed >1.2× required → +0.5
+- Flash < required → -1, RAM < required → -1, Speed < required → -1
+- Floor at 1, ceiling at 5
 
-  return {
-    partNumber: part.mpn,
-    manufacturer: part.manufacturer,
-    totalScore: Math.round(totalScore * 100) / 100, // e.g., 3.85
-    breakdown: scores,
-    recommendation: totalScore >= 3.5 ? 'recommended' : 'acceptable'
-  };
-}
+Vendor reputation:
+- Tier 1 (TI, STMicroelectronics, Analog Devices, Nordic) → 5
+- Tier 2 (Microchip, NXP, Infineon, ON Semiconductor, Renesas) → 4
+- Otherwise (authorized distributor stock) → 3
 
-function scoreCost(unitPrice) {
-  if (unitPrice < 1) return 5;
-  if (unitPrice < 5) return 4;
-  if (unitPrice < 15) return 3;
-  if (unitPrice < 30) return 2;
-  return 1;
-}
+**Weighted total:** `(cost × 0.35) + (availability × 0.30) + (features × 0.25) + (vendor × 0.10)`
 
-function scoreAvailability(stock, leadTimeWeeks) {
-  if (stock > 1000 && leadTimeWeeks <= 2) return 5;
-  if (stock > 100 && leadTimeWeeks <= 4) return 4;
-  if (stock > 50 && leadTimeWeeks <= 6) return 3;
-  if (stock > 10 && leadTimeWeeks <= 8) return 2;
-  return 1;
-}
-
-function scoreVendor(manufacturer) {
-  const tier1 = ['Texas Instruments', 'STMicroelectronics', 'Analog Devices', 'Nordic Semiconductor'];
-  const tier2 = ['Microchip', 'NXP', 'Infineon', 'ON Semiconductor', 'Renesas'];
-
-  if (tier1.includes(manufacturer)) return 5;
-  if (tier2.includes(manufacturer)) return 4;
-  return 3; // Unknown but authorized distributor stock
-}
-
-function scoreFeatures(partSpecs, requirements) {
-  // Compare part specs against requirements
-  // Return 5 if exceeds all, 4 if meets all + some exceed, 3 if meets all, etc.
-  let score = 3; // Base: meets requirements
-
-  // Increment for exceeds
-  if (partSpecs.flash > requirements.flash * 1.5) score += 0.5;
-  if (partSpecs.ram > requirements.ram * 1.5) score += 0.5;
-  if (partSpecs.speed > requirements.speed * 1.2) score += 0.5;
-
-  // Decrement for gaps
-  if (partSpecs.flash < requirements.flash) score -= 1;
-  if (partSpecs.ram < requirements.ram) score -= 1;
-  if (partSpecs.speed < requirements.speed) score -= 1;
-
-  return Math.max(1, Math.min(5, Math.round(score)));
-}
-```
-
-**Selection Process:**
-
-```javascript
-function selectBestPart(candidates, requirements) {
-  // Score all candidates
-  const scored = candidates.map(part => evaluateComponent(part, requirements));
-
-  // Sort by total score descending
-  scored.sort((a, b) => b.totalScore - a.totalScore);
-
-  // Select highest scoring part as primary
-  const primary = scored[0];
-
-  console.log(`Selected: ${primary.partNumber} (${primary.manufacturer})`);
-  console.log(`  Score: ${primary.totalScore}/5.0`);
-  console.log(`  Breakdown: Cost=${primary.breakdown.cost}, Avail=${primary.breakdown.availability}, Features=${primary.breakdown.features}, Vendor=${primary.breakdown.vendor}`);
-
-  return primary;
-}
-```
+Select the highest-scoring candidate as primary. Log: part number, manufacturer, total score (e.g., 3.85/5.0), and breakdown by dimension. Mark as `recommended` if score ≥ 3.5, otherwise `acceptable`.
 
 ### FALLBACK STRATEGY
 
-If DigiKey has no results, fall back to alternate sources:
+If DigiKey has no results, fall back to alternate sources in this priority order:
 
-```javascript
-async function searchComponentWithFallback(category, requirements) {
-  // 1. Try DigiKey first (primary)
-  let candidates = await searchDigiKey(category, requirements);
-
-  if (candidates.length > 0) {
-    console.log(`DigiKey: Found ${candidates.length} candidates for ${category}`);
-    return { source: 'DigiKey', candidates };
-  }
-
-  // 2. Try Mouser (secondary)
-  console.log(`DigiKey: No results for ${category}. Trying Mouser...`);
-  candidates = await searchMouser(category, requirements);
-
-  if (candidates.length > 0) {
-    console.log(`Mouser: Found ${candidates.length} candidates for ${category}`);
-    return { source: 'Mouser', candidates };
-  }
-
-  // 3. Try Arrow/Newark/Avnet (tertiary)
-  console.log(`Mouser: No results for ${category}. Trying Arrow/Newark...`);
-  candidates = await searchArrowNewark(category, requirements);
-
-  if (candidates.length > 0) {
-    console.log(`Arrow/Newark: Found ${candidates.length} candidates for ${category}`);
-    return { source: 'Arrow/Newark', candidates };
-  }
-
-  // 4. Web research (last resort)
-  console.log(`No distributor results for ${category}. Performing web research...`);
-  const webResults = await webSearchComponent(category, requirements);
-
-  if (webResults.length > 0) {
-    return { source: 'WebSearch', candidates: webResults };
-  }
-
-  // 5. Flag if no viable part found
-  console.warn(`WARNING: No viable part found for ${category}`);
-  return {
-    source: 'NONE',
-    candidates: [],
-    flag: `No viable ${category} found. Consider requirement relaxation or manual search.`
-  };
-}
-```
-
-**Distributor Priority (per CONTEXT.md):**
-1. DigiKey (primary - largest parametric database)
-2. Mouser (secondary - major authorized distributor)
-3. Arrow/Newark/Avnet (tertiary - authorized alternatives)
+1. **DigiKey** (primary — largest parametric database)
+2. **Mouser** (secondary — major authorized distributor)
+3. **Arrow/Newark/Avnet** (tertiary — authorized alternatives)
+4. **Web research** (last resort — use WebSearch for discovery only)
+5. **Flag if no viable part found:** `No viable {category} found. Consider requirement relaxation or manual search.`
 
 **NOT ALLOWED:** LCSC, AliExpress, eBay, brokers, or unauthorized sources
 
@@ -2946,77 +2213,29 @@ Verify lifecycle status before selecting any part. Only Active parts are accepta
 | Last Time Buy | Final purchase window | **REJECT** - too late for new design |
 | Obsolete | Discontinued | **REJECT** - no manufacturer stock |
 
-**Verification Sources (all trusted per CONTEXT.md):**
+**Verification Sources (all trusted):**
 1. Manufacturer PCN/PDN notices (product change/discontinuation)
 2. Distributor lifecycle flags (DigiKey/Mouser status field)
 3. Vendor product pages (manufacturer's official site)
 4. Octopart aggregated data (cross-references multiple sources)
 
-**Implementation:**
+**Lifecycle determination:**
+- `active` or `production` → pass, note: `Part is in full production`
+- `introduction` → pass with caution: `New product, limited field data`
+- `nrnd` or `not recommended for new design` → fail: `NRND — REJECT`
+- `last time buy` or `ltb` → fail: `Last Time Buy — REJECT`
+- `obsolete` or `eol` → fail: `Discontinued — REJECT`
+- Unknown → flag as unverified: `Status not confirmed — manual verification recommended`
 
-```javascript
-function verifyLifecycleStatus(partInfo) {
-  const status = partInfo.lifecycleStatus?.toLowerCase() || 'unknown';
+**Conflicting status:** If DigiKey and manufacturer disagree on lifecycle status, flag for user decision: `DigiKey says {status1}, manufacturer says {status2}. Proceed?`
 
-  const statusMap = {
-    'active': { pass: true, note: 'Part is in full production' },
-    'production': { pass: true, note: 'Part is in full production' },
-    'introduction': { pass: true, note: 'New product, limited field data' },
-    'nrnd': { pass: false, note: 'Not Recommended for New Design - REJECT' },
-    'not recommended for new design': { pass: false, note: 'NRND - REJECT' },
-    'last time buy': { pass: false, note: 'Final purchase window - REJECT for new design' },
-    'ltb': { pass: false, note: 'Last Time Buy - REJECT' },
-    'obsolete': { pass: false, note: 'Discontinued - REJECT' },
-    'eol': { pass: false, note: 'End of Life - REJECT' },
-    'unknown': { pass: null, note: 'Status not confirmed - flag for verification' }
-  };
-
-  const result = statusMap[status] || statusMap['unknown'];
-
-  return {
-    status: status,
-    acceptable: result.pass,
-    note: result.note,
-    action: result.pass === false ? 'find_alternative' :
-            result.pass === null ? 'flag_as_unverified' : 'proceed'
-  };
-}
-```
-
-**Handling Conflicting Status:**
-
-When sources disagree, flag for user decision:
-
-```javascript
-function checkConflictingStatus(digikeyStatus, manufacturerStatus) {
-  if (digikeyStatus !== manufacturerStatus) {
-    return {
-      conflict: true,
-      digikeyStatus,
-      manufacturerStatus,
-      message: `DigiKey says ${digikeyStatus}, manufacturer says ${manufacturerStatus}. Proceed?`,
-      action: 'flag_for_user_decision'
-    };
-  }
-
-  return { conflict: false };
-}
-```
-
-**Missing Lifecycle Data:**
-
-If lifecycle status is unavailable, flag as unverified (per CONTEXT.md):
-
-```markdown
-**Lifecycle Status:** Unverified (status not confirmed from distributor or manufacturer)
-**Action:** Proceed with caution, manual verification recommended
-```
+**Missing lifecycle data:** Document as unverified and note: `Proceed with caution, manual verification recommended`
 
 ### HARD-TO-SOURCE THRESHOLD DETECTION
 
 Identify parts that need alternates based on sourcing risk.
 
-**Thresholds (per CONTEXT.md):**
+**Thresholds:**
 
 | Criterion | Threshold | Trigger |
 |-----------|-----------|---------|
@@ -3024,80 +2243,12 @@ Identify parts that need alternates based on sourcing risk.
 | Stock Quantity | <100 units | Requires alternate |
 | Price Spike | >50% vs historical | Requires alternate |
 
-**Implementation:**
+When a part triggers any threshold, find 1-2 alternates:
+- Search DigiKey cross-reference tool for similar parts
+- Filter to: active lifecycle, stock ≥100 units, lead time ≤8 weeks
+- Return top 1-2 viable alternates
 
-```javascript
-function checkHardToSource(part) {
-  const thresholds = {
-    leadTimeWeeks: 8,
-    stockQuantity: 100,
-    priceSpikePct: 50
-  };
-
-  const issues = [];
-
-  // Lead time check
-  if (part.leadTimeWeeks > thresholds.leadTimeWeeks) {
-    issues.push({
-      criterion: 'lead_time',
-      value: part.leadTimeWeeks,
-      threshold: thresholds.leadTimeWeeks,
-      message: `Lead time ${part.leadTimeWeeks} weeks exceeds ${thresholds.leadTimeWeeks} week threshold`
-    });
-  }
-
-  // Stock quantity check
-  if (part.stockQuantity < thresholds.stockQuantity) {
-    issues.push({
-      criterion: 'stock',
-      value: part.stockQuantity,
-      threshold: thresholds.stockQuantity,
-      message: `Stock ${part.stockQuantity} units below ${thresholds.stockQuantity} unit threshold`
-    });
-  }
-
-  // Price spike check (if historical data available)
-  if (part.priceSpikePct && part.priceSpikePct > thresholds.priceSpikePct) {
-    issues.push({
-      criterion: 'price_spike',
-      value: part.priceSpikePct,
-      threshold: thresholds.priceSpikePct,
-      message: `Price spike ${part.priceSpikePct}% exceeds ${thresholds.priceSpikePct}% threshold`
-    });
-  }
-
-  return {
-    isHardToSource: issues.length > 0,
-    issues: issues,
-    action: issues.length > 0 ? 'provide_alternates' : 'proceed'
-  };
-}
-```
-
-**Alternate Selection:**
-
-When part is hard-to-source, provide 1-2 alternates meeting same specs:
-
-```javascript
-async function findAlternates(primaryPart, requirements) {
-  // Use DigiKey Cross Reference tool
-  const alternates = await searchSimilarParts(primaryPart.mpn);
-
-  // Filter to active lifecycle, in-stock parts
-  const viable = alternates.filter(alt =>
-    verifyLifecycleStatus(alt).acceptable &&
-    alt.stockQuantity >= 100 &&
-    alt.leadTimeWeeks <= 8
-  );
-
-  // Return top 1-2 alternates
-  return viable.slice(0, 2);
-}
-```
-
-**Alternate Documentation Format:**
-
-Document alternates inline with primary part:
+**Document alternates inline with primary part:**
 
 ```markdown
 **Primary:** TPS54331 (Texas Instruments) - $2.15, 1500 in stock
@@ -3130,32 +2281,18 @@ Use generic specifications for resistors, capacitors, and basic connectors inste
 - Power inductors (saturation current critical)
 - Application-specific connectors
 
-**Implementation:**
-
-```javascript
-function formatCommodityPart(component) {
-  switch (component.type) {
-    case 'resistor':
-      return `${component.value} ${component.package} ${component.tolerance}`;
-    case 'capacitor':
-      return `${component.value} ${component.package} ${component.voltage} ${component.dielectric}`;
-    case 'inductor':
-      return `${component.value} ${component.package} ${component.current}A`;
-    case 'led':
-      return `${component.color} ${component.package} ${component.vf}V`;
-    case 'connector':
-      return `${component.type} ${component.pitch}mm ${component.pins}P`;
-    default:
-      return component.description;
-  }
-}
-```
+Format commodity parts by type:
+- resistor → `{value} {package} {tolerance}`
+- capacitor → `{value} {package} {voltage} {dielectric}`
+- inductor → `{value} {package} {current}A`
+- led → `{color} {package} {vf}V`
+- connector → `{type} {pitch}mm {pins}P`
 
 ### BOM DOCUMENTATION FORMAT
 
 Standard fields and format for Bill of Materials documentation.
 
-**Required Fields (per CONTEXT.md):**
+**Required Fields:**
 1. Part number and manufacturer
 2. Key specifications
 3. Availability and pricing
@@ -3183,76 +2320,15 @@ Standard fields and format for Bill of Materials documentation.
 - **Manufacturer:** Who makes it (or "-" for generic)
 - **Description:** Key specs in brief
 - **Qty:** Quantity per unit
-- **Unit Price:** 1-10 qty pricing from DigiKey/Mouser
+- **Unit Price:** 1-10 qty pricing from DigiKey/Mouser (prefix `est.` if from web search)
 - **Stock:** Quantity in stock (or "-" for generic)
 - **Lead Time:** Factory lead time if not in stock (or "-" for generic)
 - **Datasheet:** URL to official datasheet (or "-" for generic)
 
-**BOM Entry Generation:**
-
-```javascript
-function generateBOMEntry(part, refDes, quantity, isCommodity = false) {
-  if (isCommodity) {
-    // Generic specification for commodity parts
-    return {
-      ref: refDes,
-      category: part.category,
-      mpn: 'Generic',
-      manufacturer: '-',
-      description: part.genericSpec, // e.g., "10k 0603 1%"
-      qty: quantity,
-      unitPrice: part.estimatedPrice || '$0.01',
-      stock: '-',
-      leadTime: '-',
-      datasheet: '-'
-    };
-  }
-
-  // Full specification for active parts
-  return {
-    ref: refDes,
-    category: part.category,
-    mpn: part.mpn,
-    manufacturer: part.manufacturer,
-    description: part.description,
-    qty: quantity,
-    unitPrice: `$${part.unitPrice.toFixed(2)}`,
-    stock: part.stockQuantity,
-    leadTime: part.leadTimeWeeks ? `${part.leadTimeWeeks} wk` : 'In Stock',
-    datasheet: part.datasheetUrl ? `[Link](${part.datasheetUrl})` : '-'
-  };
-}
-```
-
-**BOM Table Formatting:**
-
-```javascript
-function formatBOMTable(entries) {
-  let markdown = '| Ref | Category | MPN | Manufacturer | Description | Qty | Unit Price | Stock | Lead Time | Datasheet |\n';
-  markdown += '|-----|----------|-----|--------------|-------------|-----|------------|-------|-----------|----------|\n';
-
-  entries.forEach(entry => {
-    markdown += `| ${entry.ref} | ${entry.category} | ${entry.mpn} | ${entry.manufacturer} | ${entry.description} | ${entry.qty} | ${entry.unitPrice} | ${entry.stock} | ${entry.leadTime} | ${entry.datasheet} |\n`;
-  });
-
-  return markdown;
-}
-```
-
-**Total BOM Cost Calculation:**
-
-```javascript
-function calculateTotalBOMCost(entries) {
-  const total = entries
-    .filter(e => e.unitPrice !== '-')
-    .reduce((sum, entry) => {
-      const price = parseFloat(entry.unitPrice.replace('$', ''));
-      return sum + (price * entry.qty);
-    }, 0);
-
-  return `$${total.toFixed(2)}`;
-}
-```
+BOM entry rules:
+- Commodity parts: MPN = "Generic", Manufacturer = "-", Stock = "-", Lead Time = "-", Datasheet = "-"
+- Active parts: use live API data (if API_MODE=true) or web estimate prefixed with `est.`
+- Total BOM Cost = sum of (unit_price × qty) for all entries with numeric prices
 
 ### OUTPUT FILES
 
@@ -3329,92 +2405,29 @@ Create `.librespin/04-bom/bom-{concept-name}.md`:
 
 ### ERROR HANDLING
 
-**No validated concepts:**
-```javascript
-if (validatedConcepts.length === 0) {
-  console.error(`ERROR: No validated concepts found (>=${threshold}% confidence).`);
-  console.error(`Run Phase 1 first, or lower confidence_threshold in librespin-concept-config.yaml.`);
-  process.exit(1);
-}
-```
+**No validated concepts:** Stop with: `ERROR: No validated concepts found (>={threshold}% confidence). Run Phase 1 first, or lower confidence_threshold in librespin-concept-config.yaml.`
 
-**Part not found:**
-```javascript
-if (searchResult.source === 'NONE') {
-  console.warn(`WARNING: No viable part found for ${category}`);
-  console.warn(`Flagging uncertainty. Consider:`);
-  console.warn(`  1. Relaxing requirements for this component`);
-  console.warn(`  2. Manual search on manufacturer websites`);
-  console.warn(`  3. Consulting with design engineer`);
+**Part not found:** Warn: `WARNING: No viable part found for {category}. Flagging uncertainty. Consider: 1) Relaxing requirements, 2) Manual search on manufacturer websites, 3) Consulting with design engineer.` Add note to BOM entry: `UNVERIFIED: No viable part found, manual search required`
 
-  // Flag in BOM output
-  bomEntry.note = 'UNVERIFIED: No viable part found, manual search required';
-}
-```
-
-**All parts NRND/obsolete for category:**
-```javascript
-if (candidates.every(c => !verifyLifecycleStatus(c).acceptable)) {
-  console.error(`CRITICAL: All ${candidates.length} candidates for ${category} are NRND or obsolete.`);
-  console.error(`No active parts meet requirements. Consider:`);
-  console.error(`  1. Relaxing requirements (different package, lower specs)`);
-  console.error(`  2. Alternative architecture approach`);
-  console.error(`  3. Custom design or module substitution`);
-
-  // Flag critical issue in output
-  return {
-    critical: true,
-    message: `No active parts available for ${category}`,
-    suggestion: 'Requirement relaxation needed'
-  };
-}
-```
+**All parts NRND/obsolete for category:** Stop with: `CRITICAL: All {N} candidates for {category} are NRND or obsolete. No active parts meet requirements. Consider: 1) Relaxing requirements (different package, lower specs), 2) Alternative architecture approach, 3) Custom design or module substitution.`
 
 ### COMPLETION SUMMARY
 
-After all concepts processed:
+After all concepts processed, report:
+- Count of validated concepts processed
+- List of BOM files created: `.librespin/04-bom/bom-{concept-slug}.md` for each
+- Estimated BOM cost per concept
+- Count of hard-to-source parts flagged (with alternates provided)
+- Count of parts with unverified lifecycle status
+- Next step: `Run Phase 1 (Concept Generation) to finalize concept documentation.`
 
-```javascript
-console.log(`\nPhase 4 (Component Research) complete.`);
-console.log(`Processed: ${validatedConcepts.length} validated concepts`);
-console.log(`\nBOM files created:`);
-validatedConcepts.forEach(concept => {
-  const conceptSlug = concept.name.toLowerCase().replace(/\s+/g, '-');
-  const bomPath = `.librespin/04-bom/bom-${conceptSlug}.md`;
-  console.log(`  - ${bomPath}`);
-});
-
-// Report total costs
-console.log(`\nEstimated BOM costs:`);
-validatedConcepts.forEach(concept => {
-  console.log(`  - ${concept.name}: ${concept.bomCost}`);
-});
-
-// Report any issues
-if (hardToSourceParts.length > 0) {
-  console.log(`\n${hardToSourceParts.length} hard-to-source parts flagged (alternates provided)`);
-}
-
-if (unverifiedParts.length > 0) {
-  console.log(`\n${unverifiedParts.length} parts have unverified lifecycle status`);
-}
-
-console.log(`\nNext: Run Phase 1 (Concept Generation) to finalize concept documentation.`);
-```
-
-**Update state file** `.librespin/state.md` — set `phase` to `4-component-research`:
-
-```javascript
-const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
-const updatedState = existingState.replace(/^phase: .+$/m, `phase: '4-component-research'`);
-fs.writeFileSync('.librespin/state.md', updatedState);
-```
+**Update state file** `.librespin/state.md` — replace the `phase:` line value with `'4-component-research'`.
 
 ### DISTRIBUTOR ENRICHMENT (Phase 4 — additive, after MPN selection)
 
 After BOM files are written to `.librespin/04-bom/`, enrich each selected component with real-time inventory and pricing from configured distributor APIs.
 
-**Trigger condition:** Only runs if `~/.librespin/credentials` exists. If absent, skip enrichment silently and continue. This preserves existing Phase 4 behavior for users without API keys (D-13).
+**Trigger condition:** Only runs if `~/.librespin/credentials` exists. If absent, skip enrichment silently and continue. This preserves existing Phase 4 behavior for users without API keys.
 
 **Enrichment execution:**
 
@@ -3473,7 +2486,7 @@ enrich_component() {
   NEXAR_PARTS_USED=${NEXAR_PARTS_USED:-0}
 
   if [ -n "$NEXAR_CLIENT_ID" ] && [ -n "$NEXAR_CLIENT_SECRET" ]; then
-    # Check free tier quota
+    # Check free tier quota (100 parts/month)
     if [ "$NEXAR_PARTS_USED" -ge 100 ] 2>/dev/null; then
       echo "[Nexar] Free tier exhausted (100/100 parts used). Upgrade at nexar.com or configure another supplier."
       enrichment+="| Nexar | Quota exhausted (100/100) | — | — | — |\n"
@@ -3514,10 +2527,8 @@ enrich_component() {
           NX_MOQ=$(echo "$NEXAR_RESULT" | jq -r '.data.supSearchMpn.results[0].part.sellers[0].offers[0].moq // "unknown"')
           enrichment+="| Nexar | $NX_STOCK | $NX_PRICE | $NX_LIFECYCLE | $NX_MOQ |\n"
           any_result=true
-          # Increment parts_used
           NEXAR_PARTS_USED=$((NEXAR_PARTS_USED + 1))
           write_credential nexar parts_used "$NEXAR_PARTS_USED"
-          # Warn at 80 parts used
           if [ "$NEXAR_PARTS_USED" -ge 80 ] && [ "$NEXAR_PARTS_USED" -lt 100 ]; then
             echo "[Nexar] WARNING: Free tier usage: $NEXAR_PARTS_USED/100 parts. Approaching limit."
           fi
@@ -3543,7 +2554,6 @@ enrich_component() {
         -d "client_id=$DK_CLIENT_ID&client_secret=$DK_CLIENT_SECRET&grant_type=client_credentials")
       DK_TOKEN=$(echo "$DKR" | jq -r '.access_token // empty')
       if [ -n "$DK_TOKEN" ]; then
-        # 9-minute window (599s - 60s buffer)
         local DK_NEW_EXPIRY
         DK_NEW_EXPIRY=$(date -u -d "+9 minutes" +%Y-%m-%dT%H:%M:%SZ)
         write_credential digikey access_token "$DK_TOKEN"
@@ -3554,7 +2564,7 @@ enrich_component() {
     fi
 
     if [ -n "$DK_TOKEN" ]; then
-      local DK_RESULT DK_STOCK DK_PRICE DK_LIFECYCLE
+      local DK_RESULT DK_STOCK DK_PRICE DK_LIFECYCLE DK_COUNT
       # CRITICAL: POST keyword search (V4). Both Authorization AND X-DIGIKEY-Client-Id required.
       DK_RESULT=$(curl -s -X POST "https://api.digikey.com/products/v4/search/keyword" \
         -H "Authorization: Bearer $DK_TOKEN" \
@@ -3601,9 +2611,8 @@ enrich_component() {
   ARROW_LOGIN=$(read_credential arrow login)
   ARROW_KEY=$(read_credential arrow api_key)
   if [ -n "$ARROW_LOGIN" ] && [ -n "$ARROW_KEY" ]; then
-    local ARROW_RESULT
+    local ARROW_RESULT ARROW_STOCK
     ARROW_RESULT=$(curl -s "https://api.arrow.com/itemservice/v4/en/search?term=$MPN&login=$ARROW_LOGIN&apikey=$ARROW_KEY")
-    local ARROW_STOCK
     ARROW_STOCK=$(echo "$ARROW_RESULT" | jq -r '.itemserviceresult.data[0].InvOrg.sources[0].Quantity // "unknown"' 2>/dev/null || echo "unknown")
     if [ "$ARROW_STOCK" = "unknown" ] || [ "$ARROW_STOCK" = "null" ]; then
       echo "[Arrow] No result or error for $MPN — logging and continuing"
@@ -3680,14 +2689,15 @@ For each component in research loop:
      b. If API_MODE=false: use web estimate, prefix price with "est." in BOM
   3. Score candidates using balanced scorecard WITH live API data (if available)
   4. Write BOM entry — API data takes precedence over any web-sourced estimate
-  5. Continue regardless of enrichment success/failure (D-17)
+  5. Continue regardless of enrichment success/failure
 ```
 
 **Do NOT wait until after all BOM files are written.** Enrichment data must be available during scoring so the best-stocked, correctly-priced part wins.
 
-**Fallback behavior (D-13):** If credentials file does not exist or `API_MODE=false`, enrichment is skipped and web estimates are used with `est.` prefix. No errors are raised.
+**Fallback behavior:** If credentials file does not exist or `API_MODE=false`, enrichment is skipped and web estimates are used with `est.` prefix. No errors are raised.
 
-**Output contract preservation (D-14):** Enrichment data is appended to `.librespin/04-bom/` files only. The output contract for downstream phases (CalcPad reads `.librespin/07-final-output/`, NGSpice reads `.librespin/08-calculations/`) is unaffected.
+**Output contract preservation:** Enrichment data is appended to `.librespin/04-bom/` files only. The output contract for downstream phases (CalcPad reads `.librespin/07-final-output/`, NGSpice reads `.librespin/08-calculations/`) is unaffected.
+
 
 ## PHASE 5: CONCEPT GENERATION
 
