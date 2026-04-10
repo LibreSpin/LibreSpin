@@ -253,6 +253,35 @@ An open-source, AI-driven end-to-end PCB and embedded circuit design workflow to
 - User decisions → recorded in design history for audit trail
 <!-- GSD:architecture-end -->
 
+## Local Testing (Before Pushing to GitHub)
+
+The primary distribution channel is the Claude Code plugin marketplace (`/plugin install LibreSpin/LibreSpin`), which pulls from GitHub. To test local changes, point Claude Code at the local repo directory directly.
+
+**Add the local marketplace (one-time setup per machine):**
+```
+/plugin marketplace add /home/william/repo/LibreSpin/LibreSpin
+```
+
+**Install the plugin:**
+```
+/plugin install librespin
+```
+
+**After any skill change:**
+```
+/reload-plugins
+```
+Skills always reflect the current working tree — switch branches, make edits, reload.
+
+**Remove when done:**
+```
+/plugin marketplace remove librespin
+/plugin uninstall librespin
+```
+
+`marketplace.json` uses `"source": "./"` which resolves to the repo root in both local and GitHub contexts — one file works for both dev and production.
+
+**CRITICAL — bump version for GitHub installs:** When releasing to GitHub, bump the version in `.claude-plugin/plugin.json` after any skill change. Claude Code caches GitHub plugins by version — stale cache = skills silently missing. Local installs read directly from disk so no bump is needed during development.
 <!-- GSD:workflow-start source:GSD defaults -->
 ## GSD Workflow Enforcement
 
