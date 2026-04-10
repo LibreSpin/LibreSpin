@@ -961,312 +961,91 @@ Generate diverse high-level architecture concepts at the conceptual level withou
 
 ### CONFIGURATION LOADING
 
-Load draft count from config file:
-
-```javascript
-const yaml = require('js-yaml');
-const fs = require('fs');
-
-// Read configuration
-const configPath = '.librespin/config.yaml';
-const config = yaml.load(fs.readFileSync(configPath, 'utf8'), {
-  schema: yaml.FAILSAFE_SCHEMA
-});
-
-// Validate draft_count
-const draftCount = config.draft_count;
-if (typeof draftCount !== 'number' || draftCount < 3 || draftCount > 10) {
-  throw new Error(`Invalid draft_count: ${draftCount}. Must be integer 3-10. Check ${configPath}`);
-}
-
-console.log(`Generating ${draftCount} architecture concepts...`);
-```
+Load draft count from `.librespin/config.yaml` (FAILSAFE_SCHEMA, no type coercion). Read `draft_count` field. If it is not an integer between 3 and 10 inclusive, stop with: "Invalid draft_count: {value}. Must be integer 3-10. Check .librespin/config.yaml". Display: "Generating {draftCount} architecture concepts..."
 
 ### REQUIREMENTS LOADING
 
-Load validated requirements from Phase 1:
-
-```javascript
-const requirementsPath = '.librespin/01-requirements/requirements.yaml';
-if (!fs.existsSync(requirementsPath)) {
-  throw new Error(`Requirements file not found: ${requirementsPath}. Run Phase 1 first.`);
-}
-
-const requirements = yaml.load(fs.readFileSync(requirementsPath, 'utf8'), {
-  schema: yaml.FAILSAFE_SCHEMA
-});
-
-// Parse domain indicators from requirements
-const domainIndicators = identifyDomain(requirements);
-console.log(`Detected domains: ${domainIndicators.join(', ') || 'generic'}`);
-```
+Load requirements from `.librespin/01-requirements/requirements.yaml` (FAILSAFE_SCHEMA). If the file does not exist, stop with: "Requirements file not found: .librespin/01-requirements/requirements.yaml. Run Phase 1 first." After loading, run domain detection (below) and display: "Detected domains: {list}" or "Detected domains: generic" if none found.
 
 ### DOMAIN DETECTION
 
-Identify application domain from requirements to inform concept generation:
+Identify application domain from `use_case` and `sensors` fields to inform concept generation:
 
-```javascript
-function identifyDomain(requirements) {
-  const domains = [];
-  const useCaseText = (requirements.use_case || '').toLowerCase();
-  const sensorsText = (JSON.stringify(requirements.sensors || [])).toLowerCase();
-
-  // Motor control domain
-  if (/motor|bldc|foc|trapezoidal|brushless|stepper/i.test(useCaseText)) {
-    domains.push('motor-control');
-  }
-
-  // IoT sensor domain
-  if (/iot|sensor network|wireless sensor|battery.*sensor/i.test(useCaseText)) {
-    domains.push('iot-sensor');
-  }
-
-  // Processing-intensive domain
-  if (/signal processing|high.*speed|parallel|real.*time|dsp/i.test(useCaseText)) {
-    domains.push('processing-intensive');
-  }
-
-  return domains;
-}
-```
+- Check `use_case` text (case-insensitive):
+  - Contains motor, bldc, foc, trapezoidal, brushless, or stepper → add domain `motor-control`
+  - Contains iot, sensor network, wireless sensor, or battery.*sensor → add domain `iot-sensor`
+  - Contains signal processing, high.*speed, parallel, real.*time, or dsp → add domain `processing-intensive`
+- Return all matched domains (empty = generic)
+- If `motor-control`: note "Consider FOC, trapezoidal, or hybrid architectures"
+- If `iot-sensor`: note "Consider centralized cloud, edge processing, or mesh topologies"
+- If `processing-intensive`: note "Consider MCU, DSP, FPGA, or hybrid processing"
 
 ### SEQUENTIAL GENERATION WITH DIVERSITY CHECKING
 
-Generate concepts one at a time, checking diversity after each:
+Generate concepts one at a time, checking diversity after each. `maxRetries = 3`.
 
-```javascript
-const concepts = [];
-const maxRetries = 3;
-
-for (let i = 0; i < draftCount; i++) {
-  let attempts = 0;
-  let newConcept = null;
-  let diversityResult = null;
-
-  while (attempts < maxRetries) {
-    // Generate concept with constraints
-    const prompt = buildConceptPrompt(requirements, domainIndicators, concepts, i);
-    newConcept = await generateConcept(prompt);
-
-    // Check diversity against all previous concepts
-    diversityResult = checkDiversity(newConcept, concepts);
-
-    if (diversityResult.isDiverse || concepts.length === 0) {
-      // Document differentiation
-      newConcept.differentiation = diversityResult.differences || [];
-      break;
-    }
-
-    attempts++;
-    console.log(`Concept ${i+1} too similar (attempt ${attempts}/${maxRetries}). Retrying...`);
-  }
-
-  if (newConcept && (diversityResult.isDiverse || concepts.length === 0)) {
-    concepts.push(newConcept);
-    console.log(`✓ Concept ${i+1}: ${newConcept.name}`);
-  } else {
-    console.warn(`Could not generate diverse concept ${i+1} after ${maxRetries} attempts.`);
-    console.warn(`Reducing count from ${draftCount} to ${concepts.length}`);
-    break; // Reduce count rather than forcing similarity
-  }
-}
-
-console.log(`\nGenerated ${concepts.length} diverse concepts.`);
-```
+- For each concept slot (1 through `draftCount`):
+  - Generate a concept using the generation strategy below (with requirements, detected domains, and all previously accepted concepts passed as context).
+  - Run diversity check against all previously accepted concepts (see DIVERSITY CHECKING ALGORITHM).
+  - If the first concept (no prior concepts), accept immediately and record its differentiation as empty.
+  - If the concept is diverse (differs in ≥1 dimension from all prior concepts), record the differing dimensions as its `differentiation` and accept it.
+  - If not diverse, retry up to `maxRetries` times, displaying: "Concept {N} too similar (attempt {attempt}/{maxRetries}). Retrying..."
+  - After `maxRetries` failed attempts, stop generating further concepts and display: "Could not generate diverse concept {N} after {maxRetries} attempts. Reducing count from {draftCount} to {current count}."
+  - Display "✓ Concept {N}: {name}" after each accepted concept.
+- After all slots processed, display: "Generated {count} diverse concepts."
 
 ### DIVERSITY CHECKING ALGORITHM
 
 Compare new concept against all previous concepts across 4 dimensions:
 
-```javascript
-function checkDiversity(newConcept, existingConcepts) {
-  if (existingConcepts.length === 0) {
-    return { isDiverse: true, differences: [] };
-  }
+1. **Processing architecture** (MCU / FPGA / DSP / ASIC) — does `processing` field differ?
+2. **System topology** (centralized / distributed / modular) — does `topology` field differ?
+3. **Communication approach** (wired / wireless / serial / parallel) — does `communication` field differ?
+4. **Power architecture** (battery/mains, LDO/switching) — does `power` field differ?
 
-  const allDifferences = [];
-
-  for (const existing of existingConcepts) {
-    const differences = [];
-
-    // Dimension 1: Processing architecture (MCU/FPGA/DSP/ASIC)
-    if (newConcept.processing !== existing.processing) {
-      differences.push(`Processing: ${newConcept.processing} vs ${existing.processing}`);
-    }
-
-    // Dimension 2: System topology (centralized/distributed/modular)
-    if (newConcept.topology !== existing.topology) {
-      differences.push(`Topology: ${newConcept.topology} vs ${existing.topology}`);
-    }
-
-    // Dimension 3: Communication approach (wired/wireless/serial/parallel)
-    if (newConcept.communication !== existing.communication) {
-      differences.push(`Communication: ${newConcept.communication} vs ${existing.communication}`);
-    }
-
-    // Dimension 4: Power architecture (battery/mains, LDO/switching)
-    if (newConcept.power !== existing.power) {
-      differences.push(`Power: ${newConcept.power} vs ${existing.power}`);
-    }
-
-    // Diversity threshold: Must differ in ≥1 major dimension (moderate standard)
-    if (differences.length < 1) {
-      return {
-        isDiverse: false,
-        reason: `Too similar to ${existing.name}`,
-        differences: []
-      };
-    }
-
-    allDifferences.push(...differences);
-  }
-
-  return {
-    isDiverse: true,
-    differences: allDifferences
-  };
-}
-```
+**Diversity threshold:** A new concept is diverse if it differs from every existing concept in at least 1 of the 4 dimensions. If it matches an existing concept on all 4 dimensions, it is not diverse. Collect all dimension differences across all pairwise comparisons and attach as `differentiation` list (e.g., "Processing: Cortex-M4 MCU vs FPGA").
 
 ### CONCEPT GENERATION STRATEGY
 
-Build prompt for concept generation with diversity and extreme constraints:
+When generating each concept, use the following constraints and strategy:
 
-```javascript
-function buildConceptPrompt(requirements, domains, existingConcepts, conceptIndex) {
-  let prompt = `Generate a hardware architecture concept meeting these requirements:\n`;
-  prompt += `${JSON.stringify(requirements, null, 2)}\n\n`;
-
-  // Domain-specific patterns
-  if (domains.includes('motor-control')) {
-    prompt += `Domain: Motor control. Consider FOC, trapezoidal, or hybrid architectures.\n`;
-  }
-  if (domains.includes('iot-sensor')) {
-    prompt += `Domain: IoT sensor. Consider centralized cloud, edge processing, or mesh topologies.\n`;
-  }
-  if (domains.includes('processing-intensive')) {
-    prompt += `Domain: Processing. Consider MCU, DSP, FPGA, or hybrid processing.\n`;
-  }
-
-  // Extreme concepts for boundary exploration
-  if (conceptIndex === 0 && existingConcepts.length === 0) {
-    prompt += `\nStrategy: Ultra-low-power extreme. Minimize power at all costs.\n`;
-  } else if (conceptIndex === 1 && existingConcepts.length === 1) {
-    prompt += `\nStrategy: Maximum performance. Optimize for capability over power/cost.\n`;
-  } else {
-    prompt += `\nStrategy: Balanced approach exploring different architectural dimension.\n`;
-  }
-
-  // Diversity constraints
-  if (existingConcepts.length > 0) {
-    prompt += `\nExisting concepts (must differ in ≥1 dimension):\n`;
-    existingConcepts.forEach(c => {
-      prompt += `- ${c.name}: ${c.processing}, ${c.topology}, ${c.communication}, ${c.power}\n`;
-    });
-  }
-
-  prompt += `\nOutput structured concept with: name, processing, topology, communication, power, assumptions, pros, cons.\n`;
-
-  return prompt;
-}
-```
+- Include the full requirements and all detected domain hints as context.
+- Apply the extreme-concept strategy for early slots:
+  - Concept 1 (first slot, no prior concepts): Strategy "Ultra-low-power extreme — minimize power at all costs."
+  - Concept 2 (second slot, one prior concept): Strategy "Maximum performance — optimize for capability over power/cost."
+  - Remaining slots: Strategy "Balanced approach exploring a different architectural dimension."
+- If prior concepts exist, list them as diversity constraints: each prior concept's name, processing, topology, communication, and power — and require the new concept to differ in ≥1 dimension.
+- Output each concept with these fields: `name`, `processing`, `topology`, `communication`, `power`, `assumptions`, `pros`, `cons`.
 
 ### CONCEPT STRUCTURE
 
-Each generated concept must include:
+Each generated concept must include these fields:
 
-```javascript
-{
-  name: "Centralized MCU Architecture",
-  summary: "Single Cortex-M4 MCU handles all processing, sensors via I2C/SPI, wireless via UART.",
+| Field | Description | Example |
+|-------|-------------|---------|
+| `name` | Short descriptive name | "Centralized MCU Architecture" |
+| `summary` | One-sentence description of the approach | "Single Cortex-M4 MCU handles all processing..." |
+| `processing` | Processing architecture tag | "Cortex-M4 MCU with FPU" |
+| `topology` | System topology tag | "centralized-single-board" |
+| `communication` | Communication approach tag | "wired-serial-I2C-SPI" |
+| `power` | Power architecture tag | "switching-buck-converter" |
+| `characteristics` | Table: dimension / choice / rationale (4 rows: Processing, Topology, Communication, Power) | see example below |
+| `assumptions` | Explicit assumptions for Phase 3 validation (list of strings, ~4-6 items) | "BLE range sufficient for use case (<10m typical)" |
+| `blockDiagram` | ASCII functional block diagram (see ASCII BLOCK DIAGRAM GENERATION) | |
+| `pros` | Qualitative advantages (list, no numbers) | "Lower cost (single MCU, fewer components)" |
+| `cons` | Qualitative disadvantages (list, no numbers) | "Single point of failure (centralized)" |
+| `differentiation` | How this concept differs from each prior concept | "vs. Distributed: Centralized (not multi-node)" |
+| `innovation.standard` | Commodity/proven elements | "Commodity MCU", "Standard buck converter" |
+| `innovation.novel` | Novel or non-standard elements | "Sensor fusion algorithm (if advanced)" |
 
-  // Architectural dimensions (for diversity checking)
-  processing: "Cortex-M4 MCU with FPU",
-  topology: "centralized-single-board",
-  communication: "wired-serial-I2C-SPI",
-  power: "switching-buck-converter",
+**Example characteristics table:**
 
-  // Characteristics table
-  characteristics: [
-    { dimension: "Processing", choice: "Cortex-M4 MCU (with FPU)", rationale: "Sufficient for sensor fusion + control loops" },
-    { dimension: "Topology", choice: "Centralized (single-board)", rationale: "Simplifies design, reduces cost" },
-    { dimension: "Communication", choice: "I2C sensors, UART wireless", rationale: "Standard protocols, wide part availability" },
-    { dimension: "Power", choice: "Buck converter (battery → 3.3V)", rationale: "Efficient step-down, single rail" }
-  ],
-
-  // Explicit assumptions for Phase 1 validation
-  assumptions: [
-    "BLE range sufficient for use case (<10m typical)",
-    "Single-sided PCB acceptable",
-    "Sensor data rates <1kHz (I2C bandwidth adequate)",
-    "No galvanic isolation required",
-    "~100 MIPS processing headroom sufficient",
-    "Typical current draw ~50mA (est. 6-month battery life on 2000mAh)"
-  ],
-
-  // ASCII block diagram (functional blocks only)
-  blockDiagram: `
-                    +-------------------+
-                    |   Battery Pack    |
-                    |    (3.7V Li-Ion)  |
-                    +---------+---------+
-                              |
-                              v (power)
-                    +---------+---------+
-                    |   Buck Converter  |
-                    |   (3.7V → 3.3V)   |
-                    +---------+---------+
-                              |
-                              v (3.3V)
-        +---------------------+---------------------+
-        |                     |                     |
-        v                     v                     v
-+-------+-------+     +-------+-------+     +-------+-------+
-|  Cortex-M4    |     |  Sensor Array |     | Wireless Comm |
-|  MCU (Main)   |<--->|  (I2C/SPI)    |     |  (BLE/LoRa)   |
-+-------+-------+     +---------------+     +-------+-------+
-        |
-        v (control)
-+-------+-------+
-| Motor Driver  |
-| (PWM output)  |
-+---------------+
-
-Legend:
-  ----> : Signal flow
-  <---> : Bidirectional communication
-  |  v  : Power flow (downward)
-`,
-
-  // Qualitative trade-offs (no numbers yet)
-  pros: [
-    "Lower cost (single MCU, fewer components)",
-    "Simpler BOM (commodity parts)",
-    "Easier firmware development (single core)",
-    "Standard peripherals (I2C, SPI, UART)"
-  ],
-
-  cons: [
-    "Limited processing headroom (single MCU)",
-    "Single point of failure (centralized)",
-    "I2C bandwidth limits sensor scalability",
-    "Battery life constrained (always-on MCU)"
-  ],
-
-  // Differentiation from other concepts
-  differentiation: [
-    "vs. Distributed: Centralized (not multi-node)",
-    "vs. FPGA-based: MCU processing (not FPGA)",
-    "vs. Low-power extreme: Moderate power (not ultra-low)"
-  ],
-
-  // Innovation marking
-  innovation: {
-    standard: ["Commodity MCU", "Standard buck converter", "I2C sensor interface", "UART wireless"],
-    novel: ["Sensor fusion algorithm (if advanced)"]
-  }
-}
-```
+| Dimension | Choice | Rationale |
+|-----------|--------|-----------|
+| Processing | Cortex-M4 MCU (with FPU) | Sufficient for sensor fusion + control loops |
+| Topology | Centralized (single-board) | Simplifies design, reduces cost |
+| Communication | I2C sensors, UART wireless | Standard protocols, wide part availability |
+| Power | Buck converter (battery → 3.3V) | Efficient step-down, single rail |
 
 ### ABSTRACTION LEVEL ENFORCEMENT
 
@@ -1286,19 +1065,12 @@ Legend:
 
 Follow these guidelines for diagram formatting:
 
-```javascript
-function formatBlockDiagram(concept) {
-  // Guidelines:
-  // - Functional blocks only (no part numbers)
-  // - Directional arrows: ----> for signal, | v for power
-  // - Keep under 30 lines, under 80 characters wide
-  // - Use consistent box alignment
-  // - Include legend for arrow types
-
-  // Load template from .claude/librespin/templates/concept-template.md
-  // Follow Pattern 2 from 04-RESEARCH.md
-}
-```
+- Functional blocks only (no part numbers)
+- Directional arrows: `---->` for signal flow, `| v` for power flow (downward)
+- Keep under 30 lines, under 80 characters wide
+- Use consistent box alignment
+- Include a legend for arrow types at the bottom
+- Load the concept template from `.claude/librespin/templates/concept-template.md` for formatting reference
 
 ### OUTPUT FILES
 
@@ -1326,51 +1098,27 @@ Includes:
 
 ### ERROR HANDLING
 
-**Invalid configuration:**
-```javascript
-if (draftCount < 3 || draftCount > 10) {
-  throw new Error(`Invalid draft_count: ${draftCount}. Must be integer 3-10.`);
-}
-```
-
-**Missing requirements:**
-```javascript
-if (!fs.existsSync(requirementsPath)) {
-  throw new Error(`Requirements file not found: ${requirementsPath}. Run Phase 1 first.`);
-}
-```
-
-**Diversity check failures:**
-```javascript
-if (attempts >= maxRetries) {
-  console.warn(`Could not generate diverse concept after ${maxRetries} attempts.`);
-  console.warn(`Reducing count from ${draftCount} to ${concepts.length}`);
-  break; // Reduce count rather than forcing similarity
-}
-```
+- **Invalid configuration:** If `draft_count` is not an integer 3–10, stop with: "Invalid draft_count: {value}. Must be integer 3-10."
+- **Missing requirements:** If `.librespin/01-requirements/requirements.yaml` does not exist, stop with: "Requirements file not found. Run Phase 1 first."
+- **Diversity check failures:** After `maxRetries` failed attempts for a concept slot, stop generating further concepts. Display: "Could not generate diverse concept after {maxRetries} attempts. Reducing count from {draftCount} to {current count}." Do not force similarity — reduce count instead.
 
 ### COMPLETION SUMMARY
 
-After all concepts generated:
+After all concepts generated, display:
 
-```javascript
-console.log(`\nPhase 2 (Architecture Drafting) complete.`);
-console.log(`Generated: ${concepts.length} diverse concepts`);
-console.log(`\nFiles created:`);
-concepts.forEach(c => {
-  console.log(`  - concept-${c.name.toLowerCase().replace(/\s+/g, '-')}.md`);
-});
-console.log(`  - overview.md`);
-console.log(`\nNext: Run Phase 1 (Validation Gate) to assess concept feasibility.`);
+```
+Phase 2 (Architecture Drafting) complete.
+Generated: {count} diverse concepts
+
+Files created:
+  - concept-{name-slug}.md
+  - ...
+  - overview.md
+
+Next: Run Phase 3 (Validation Gate) to assess concept feasibility.
 ```
 
-**Update state file** `.librespin/state.md` — set `phase` to `2-architecture-drafting`:
-
-```javascript
-const existingState = fs.readFileSync('.librespin/state.md', 'utf8');
-const updatedState = existingState.replace(/^phase: .+$/m, `phase: '2-architecture-drafting'`);
-fs.writeFileSync('.librespin/state.md', updatedState);
-```
+**Update state file** `.librespin/state.md` — replace the `phase:` frontmatter line with `phase: '2-architecture-drafting'`.
 
 ### DESIGN GOALS
 
